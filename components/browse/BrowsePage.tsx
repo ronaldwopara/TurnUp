@@ -162,12 +162,82 @@ export default function BrowsePage() {
     return UNIVERSITIES.find((u) => u.id === selectedUniversityId) ?? UNIVERSITIES[0];
   }, [selectedUniversityId]);
 
+  const selectedUniversityAbbr = useMemo(() => {
+    const profile = getUserProfile();
+    if (profile?.universityId === selectedUniversityId && profile.universityAbbr) return profile.universityAbbr;
+    return selectedUniversity.abbr;
+  }, [selectedUniversityId, selectedUniversity.abbr]);
+
   const universitiesForPicker: University[] = useMemo(() => {
     const city = selectedUniversity.city;
     const nearby = UNIVERSITIES.filter((u) => u.city === city);
     const rest = UNIVERSITIES.filter((u) => u.city !== city);
     return [...nearby, ...rest];
   }, [selectedUniversity.city]);
+
+  const [aiOrderedUniversityIds, setAiOrderedUniversityIds] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (!uniSheetOpen) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const profile = getUserProfile();
+        const cityHint = profile?.universityId
+          ? UNIVERSITIES.find((u) => u.id === profile.universityId)?.city
+          : selectedUniversity.city;
+        const res = await fetch("/api/universities/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cityHint,
+            selectedUniversityId,
+          }),
+        });
+        if (!res.ok) return;
+        const payload = (await res.json()) as { data?: { orderedIds?: string[] } };
+        const ordered = payload.data?.orderedIds;
+        if (!cancelled && Array.isArray(ordered) && ordered.length) {
+          setAiOrderedUniversityIds(ordered);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [uniSheetOpen, selectedUniversity.city, selectedUniversityId]);
+
+  const universitiesForPickerAi: University[] = useMemo(() => {
+    if (!aiOrderedUniversityIds?.length) return universitiesForPicker;
+    const byId = new Map(UNIVERSITIES.map((u) => [u.id, u] as const));
+    const ordered = aiOrderedUniversityIds.map((id) => byId.get(id)).filter((u): u is University => !!u);
+    // Ensure we always include everything (fallback ordering for missing IDs).
+    const seen = new Set(ordered.map((u) => u.id));
+    const rest = UNIVERSITIES.filter((u) => !seen.has(u.id));
+    return [...ordered, ...rest];
+  }, [aiOrderedUniversityIds, universitiesForPicker]);
+
+  // Keep Browse in sync with the latest onboarding/profile pick.
+  // (The university can be set during onboarding before the user reaches /browse.)
+  useEffect(() => {
+    const syncFromProfile = () => {
+      const profile = getUserProfile();
+      if (profile?.universityId && profile.universityId !== selectedUniversityId) {
+        setSelectedUniversityId(profile.universityId);
+      }
+    };
+
+    // Sync on mount and whenever the sheet is opened.
+    syncFromProfile();
+    if (uniSheetOpen) syncFromProfile();
+
+    // Lightweight periodic sync so navigation without reload stays correct.
+    const t = window.setInterval(syncFromProfile, 1500);
+    return () => window.clearInterval(t);
+  }, [selectedUniversityId, uniSheetOpen]);
 
   const filteredEvents = useMemo(() => {
     let list = ALL_EVENTS;
@@ -400,7 +470,7 @@ export default function BrowsePage() {
           onClick={openUniFromCompact}
         >
           <span className="browse-compact-brand">TurnUp</span>
-          <span className="browse-compact-uni">{selectedUniversity.abbr}</span>
+          <span className="browse-compact-uni">{selectedUniversityAbbr}</span>
           <svg className="browse-compact-caret" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
             <path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -430,7 +500,7 @@ export default function BrowsePage() {
                 aria-haspopup="dialog"
                 onClick={openUniFromCompact}
               >
-                <span className="browse-location-name">{selectedUniversity.abbr}</span>
+                <span className="browse-location-name">{selectedUniversityAbbr}</span>
                 <svg className="city-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -593,7 +663,7 @@ export default function BrowsePage() {
       >
         <div className="browse-sheet-handle" />
         <div className="browse-uni-list browse-uni-list--top">
-          {universitiesForPicker.map((u) => {
+          {universitiesForPickerAi.map((u) => {
             const isSelected = u.id === selectedUniversityId;
             return (
               <button
@@ -608,6 +678,7 @@ export default function BrowsePage() {
                     ...(prev ?? { name: "", university: "" }),
                     universityId: u.id,
                     university: u.name,
+                    universityAbbr: u.abbr,
                   });
                   setUniSheetOpen(false);
                 }}

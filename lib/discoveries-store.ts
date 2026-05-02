@@ -25,6 +25,7 @@ export type UserProfile = {
   university: string;
   schoolEmail?: string;
   universityId?: string;
+  universityAbbr?: string;
   role?: "student" | "organiser";
   dataPrivacyAccepted?: boolean;
 };

@@ -430,10 +430,26 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
         if (inferredId) {
           const uni = UNIVERSITIES.find((u) => u.id === inferredId);
           const prev = getUserProfile();
+          let abbr = uni?.abbr ?? "";
+          try {
+            const res = await fetch("/api/universities/ai", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ universityNameForAbbr: uni?.name ?? "" }),
+            });
+            if (res.ok) {
+              const payload = (await res.json()) as { data?: { abbr?: string | null } };
+              const next = payload.data?.abbr;
+              if (typeof next === "string" && next.trim()) abbr = next.trim();
+            }
+          } catch {
+            // ignore
+          }
           setUserProfile({
             ...(prev ?? { name: "", university: "" }),
             universityId: inferredId,
             university: uni?.name ?? prev?.university ?? "",
+            universityAbbr: abbr || uni?.abbr,
           });
         }
         setPermStep((p) => p + 1);
