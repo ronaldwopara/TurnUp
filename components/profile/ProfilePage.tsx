@@ -25,6 +25,16 @@ import {
 
 import { DiscoveriesStack, type DiscoveryStackItem } from "./DiscoveriesStack";
 
+type ProfileStashItem = {
+  id: string;
+  type: "document" | "link" | "image" | "video";
+  title: string;
+  subtitle?: string | null;
+  detailLabel?: string | null;
+  sourceUrl?: string | null;
+  createdAt?: string;
+};
+
 function deriveAiInsights(likedEvents: EventItem[], captureCount: number): string[] {
   const raw: string[] = [];
   if (likedEvents.length === 0 && captureCount === 0) {
@@ -53,6 +63,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const [profile] = useState(() => getUserProfile());
   const [discoveryCount, setDiscoveryCount] = useState(() => getDiscoveryCount());
+  const [stashes, setStashes] = useState<ProfileStashItem[]>([]);
   const [googleConnected, setGoogleConnected] = useState(false);
 
   const [uniSheetOpen, setUniSheetOpen] = useState(false);
@@ -107,8 +118,21 @@ export default function ProfilePage() {
         capture: cap,
       });
     }
+    for (const stash of stashes) {
+      out.push({
+        kind: "stash",
+        key: `stash-${stash.id}`,
+        title: stash.title || "Saved item",
+        stash: {
+          type: stash.type,
+          subtitle: stash.subtitle,
+          detailLabel: stash.detailLabel,
+          sourceUrl: stash.sourceUrl,
+        },
+      });
+    }
     return out;
-  }, [dateFilteredLiked, captures]);
+  }, [dateFilteredLiked, captures, stashes]);
 
   const aiInsights = useMemo(
     () => deriveAiInsights(dateFilteredLiked, captures.length),
@@ -122,11 +146,44 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const t = setInterval(() => {
-      setDiscoveryCount(getDiscoveryCount());
       setLikesVersion((v) => v + 1);
     }, 1200);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadStashes = async () => {
+      try {
+        const response = await fetch("/api/profile?userId=demo-user", { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          data?: {
+            stashes?: ProfileStashItem[];
+          };
+        };
+        if (!isMounted) return;
+        setStashes(payload.data?.stashes ?? []);
+      } catch {
+        if (!isMounted) return;
+        setStashes([]);
+      }
+    };
+
+    void loadStashes();
+    const t = setInterval(() => {
+      void loadStashes();
+    }, 2000);
+    return () => {
+      isMounted = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  useEffect(() => {
+    setDiscoveryCount(getDiscoveryCount() + stashes.length);
+  }, [stashes.length, likesVersion]);
 
   useEffect(() => {
     if (!uniSheetOpen && !dateSheetOpen) return;

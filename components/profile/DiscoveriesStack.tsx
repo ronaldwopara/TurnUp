@@ -7,7 +7,18 @@ import type { CaptureItem } from "@/lib/discoveries-store";
 
 export type DiscoveryStackItem =
   | { kind: "event"; key: string; title: string; event: EventItem }
-  | { kind: "capture"; key: string; title: string; capture: CaptureItem };
+  | { kind: "capture"; key: string; title: string; capture: CaptureItem }
+  | {
+      kind: "stash";
+      key: string;
+      title: string;
+      stash: {
+        type: "document" | "link" | "image" | "video";
+        subtitle?: string | null;
+        detailLabel?: string | null;
+        sourceUrl?: string | null;
+      };
+    };
 
 const MIN_DRAG = 50;
 const MAX_CARDS_PER_DECK = 6;
@@ -22,6 +33,20 @@ function stackTransform(index: number): { x: number; y: number; rotate: number }
     y: index * verticalOffset,
     rotate: index === 0 ? 0 : -(baseRotation + index * rotationIncrement),
   };
+}
+
+function stashGlyph(type: "document" | "link" | "image" | "video") {
+  switch (type) {
+    case "video":
+      return "VIDEO";
+    case "image":
+      return "FLYER";
+    case "document":
+      return "DOC";
+    case "link":
+    default:
+      return "LINK";
+  }
 }
 
 export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
@@ -134,6 +159,60 @@ export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
                 {item.kind === "capture" ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={item.capture.dataUrl} alt="" className="discoveries-stack-img" draggable={false} />
+                ) : item.kind === "stash" ? (
+                  <div className="discoveries-stack-gradient">
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 16,
+                        left: 16,
+                        right: 16,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 10,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: "0.08em",
+                          fontWeight: 700,
+                          opacity: 0.88,
+                        }}
+                      >
+                        {stashGlyph(item.stash.type)}
+                      </span>
+                      {item.stash.sourceUrl ? (
+                        <span style={{ fontSize: 11, opacity: 0.75 }}>
+                          {(() => {
+                            try {
+                              return new URL(item.stash.sourceUrl).hostname.replace(/^www\./, "");
+                            } catch {
+                              return "";
+                            }
+                          })()}
+                        </span>
+                      ) : null}
+                    </div>
+                    {(item.stash.subtitle || item.stash.detailLabel) && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: 16,
+                          right: 16,
+                          bottom: 14,
+                          fontSize: 12,
+                          opacity: 0.82,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {item.stash.subtitle ?? item.stash.detailLabel}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div
                     className="discoveries-stack-gradient"
