@@ -81,7 +81,12 @@ function parseIsoDate(input: string): { year: number; month: number; day: number
 }
 
 function parseLooseDate(input: string): { year: number; month: number; day: number } | null {
-  const parsed = new Date(input.trim());
+  const normalized = input
+    .trim()
+    .replace(/(\d{1,2})(st|nd|rd|th)\b/gi, "$1")
+    .replace(/\u2019/g, "'")
+    .replace(/\s+/g, " ");
+  const parsed = new Date(normalized);
   if (Number.isNaN(parsed.getTime())) {
     return null;
   }

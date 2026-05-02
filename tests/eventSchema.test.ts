@@ -72,6 +72,20 @@ describe("event payload schema", () => {
     expect(payload.outlookCalendarUrl).toContain("enddt=2026-10-04T21%3A30%3A00");
   });
 
+  it("parses ordinal dates and unicode dash time ranges", () => {
+    const payload = buildCalendarPayload({
+      title: "UAlberta BESA Annual General Meeting",
+      date: "September 15th, 2025",
+      time: "5:30–7:00 PM",
+      location: "CCIS 1-160",
+      description: "AGM event",
+      confidence: 0.8,
+    });
+
+    expect(payload.googleCalendarUrl).toContain("dates=20250915T173000%2F20250915T190000");
+    expect(payload.googleCalendarUrl).toContain("ctz=America%2FEdmonton");
+  });
+
   it("adds all-day dates when time is missing", () => {
     const payload = buildCalendarPayload({
       title: "Campus Fair",
