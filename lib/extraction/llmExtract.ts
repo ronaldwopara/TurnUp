@@ -16,7 +16,7 @@ const EXTRACTION_JSON_SCHEMA = {
     event: {
       type: "object",
       additionalProperties: false,
-      required: ["title", "date", "time", "location", "description", "confidence"],
+      required: ["title", "date", "time", "location", "description", "confidence", "calendarSchedule"],
       properties: {
         title: {
           type: "string",
@@ -43,6 +43,14 @@ const EXTRACTION_JSON_SCHEMA = {
           type: "number",
           description: "Confidence 0-1 this is an event flyer and title is correct; 0 if no flyer found.",
         },
+        calendarSchedule: {
+          anyOf: [
+            { type: "null" },
+            { type: "string", enum: ["daily_same_hours", "multi_day_continuous"] },
+          ],
+          description:
+            "For calendar links: daily_same_hours when multiple days share the same session times (use recurrence). multi_day_continuous when one uninterrupted span from first day start through last day end. null for single-day or all-day-only.",
+        },
       },
     },
     ambiguityNotes: {
@@ -56,6 +64,7 @@ const EXTRACTION_JSON_SCHEMA = {
 const SYSTEM_PROMPT =
   "You are a vision-language extraction engine for event flyers, posters, " +
   "invitations, and event-style graphics. Produce JSON matching the schema exactly. " +
+  "Prioritize date(s) and time for Google Calendar eventedit URLs (dates=YYYYMMDDTHHMMSS/…, ctz=IANA). " +
   "Never refuse, never add prose outside the JSON object.";
 
 const USER_PROMPT_BASE = [
@@ -73,7 +82,14 @@ const USER_PROMPT_BASE = [
   "",
   "Reading:",
   "- Put OCR text in extractedText; summarize in description without inventing facts.",
+  "- Preserve date ranges (e.g. Jan 15-17, 2026 or Jan 6, 7, and 8 of 2026) in event.date.",
+  "- Preserve time ranges (e.g. 10:00 AM - 3:00 PM) in event.time.",
   "- If unreadable parts remain, explain in ambiguityNotes.",
+  "",
+  "Calendar semantics:",
+  "- Multiple days with the SAME hours each day (fair Jan 6-8, 10am-3pm): set calendarSchedule to daily_same_hours.",
+  "- One continuous timed block from first day through last day: multi_day_continuous.",
+  "- Single day or only all-day dates: calendarSchedule null.",
   "",
   "Confidence:",
   "- 0.85+ flyer clear and ≥1 legible scheduling/location cue often present.",
@@ -147,7 +163,12 @@ async function callImageExtraction(input: {
   contextHint?: string;
   retryHint?: string;
 }): Promise<ExtractionResult | null> {
-  const promptParts = [USER_PROMPT_BASE];
+  const currentYear = new Date().getFullYear();
+  const promptParts = [
+    USER_PROMPT_BASE,
+    "",
+    `Current year: ${currentYear}. If a date has no year printed, assume ${currentYear} and include it in event.date.`,
+  ];
   if (input.contextHint?.trim()) {
     promptParts.push("", `Additional context: ${input.contextHint.trim()}`);
   }

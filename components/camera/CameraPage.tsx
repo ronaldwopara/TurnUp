@@ -14,6 +14,24 @@ const byPrefixAndName = {
   },
 } as const;
 
+const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
+
+async function fileFromSheetUploadValue(value: File | string | null): Promise<File | null> {
+  if (value == null) {
+    return null;
+  }
+  if (value instanceof File) {
+    return value;
+  }
+  if (typeof value === "string" && value.startsWith("data:")) {
+    const res = await fetch(value);
+    const blob = await res.blob();
+    const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
+    return new File([blob], `turnup-upload.${ext}`, { type: blob.type || "image/jpeg" });
+  }
+  return null;
+}
+
 function ProfileIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -163,6 +181,7 @@ export default function CameraPage() {
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const userId = "demo-user";
 
@@ -289,7 +308,12 @@ export default function CameraPage() {
     };
   }, []);
 
-  async function submitImage(file: File) {
+  async function submitImage(file: File, options?: { clearSheetUpload?: boolean }) {
+    if (file.type && !SUPPORTED_IMAGE_TYPES.has(file.type.toLowerCase())) {
+      setStatusMessage("Unsupported image type. Use PNG, JPEG, WEBP, or GIF.");
+      setParsedEvent(null);
+      return;
+    }
     setIsBusy(true);
     setStatusMessage("Analyzing flyer...");
     setParsedEvent(null);
@@ -313,17 +337,34 @@ export default function CameraPage() {
         };
       };
       const title = payload.data?.event?.title ?? "Event parsed";
-      setStatusMessage(`Parsed: ${title}`);
+      const isNoFlyerFound = title.trim().toLowerCase() === "no flyer found";
+      setStatusMessage(isNoFlyerFound ? "No flyer found" : "Add to calendar");
       setParsedEvent({
         title,
-        googleCalendarUrl: payload.data?.calendarPayload?.googleCalendarUrl,
+        googleCalendarUrl: isNoFlyerFound ? undefined : payload.data?.calendarPayload?.googleCalendarUrl,
       });
+      if (options?.clearSheetUpload) {
+        setSheetUploadImage(null);
+        closeSheet();
+      }
     } catch {
       setStatusMessage("Could not parse image. Try another photo.");
       setParsedEvent(null);
     } finally {
       setIsBusy(false);
     }
+  }
+
+  async function onAnalyzeSheetUpload() {
+    if (isBusy) {
+      return;
+    }
+    const file = await fileFromSheetUploadValue(sheetUploadImage);
+    if (!file) {
+      setStatusMessage("Choose an image first.");
+      return;
+    }
+    await submitImage(file, { clearSheetUpload: true });
   }
 
   async function onTakePhoto() {
@@ -402,10 +443,11 @@ export default function CameraPage() {
         };
       };
       const title = payload.data?.event?.title ?? "Event parsed";
-      setStatusMessage(`Parsed from link: ${title}`);
+      const isNoFlyerFound = title.trim().toLowerCase() === "no flyer found";
+      setStatusMessage(isNoFlyerFound ? "No flyer found" : "Add to calendar");
       setParsedEvent({
         title,
-        googleCalendarUrl: payload.data?.calendarPayload?.googleCalendarUrl,
+        googleCalendarUrl: isNoFlyerFound ? undefined : payload.data?.calendarPayload?.googleCalendarUrl,
       });
       setLinkValue("");
       closeSheet();
@@ -425,10 +467,16 @@ export default function CameraPage() {
         <div className="camera-status">{isBusy ? "Processing..." : statusMessage}</div>
       </div>
       <input
-        ref={fileInputRef}
+        ref={galleryInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
+        style={{ display: "none" }}
+        onChange={onPickFile}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="*/*"
         style={{ display: "none" }}
         onChange={onPickFile}
       />
@@ -486,18 +534,34 @@ export default function CameraPage() {
             value={sheetUploadImage}
             onChange={setSheetUploadImage}
             aspectRatio={1.55}
+            disabled={isBusy}
+            isLoading={isBusy && sheet === "uploads"}
             onCaptureSave={(dataUrl) => {
               addCapture(dataUrl);
             }}
           />
         </div>
         <div className="sheet-upload-footer">
-          <button type="button" className="sheet-source-pill sheet-source-pill--primary" onClick={() => fileInputRef.current?.click()}>
-            Photo Library
+          <button
+            type="button"
+            className="sheet-btn sheet-btn--analyze"
+            onClick={() => void onAnalyzeSheetUpload()}
+            disabled={isBusy || sheetUploadImage == null}
+          >
+            {isBusy ? "Analyzing…" : "Analyze flyer"}
           </button>
-          <button type="button" className="sheet-source-pill" onClick={() => fileInputRef.current?.click()}>
-            Files
-          </button>
+          <div className="sheet-upload-footer__sources">
+            <button
+              type="button"
+              className="sheet-source-pill sheet-source-pill--primary"
+              onClick={() => galleryInputRef.current?.click()}
+            >
+              Photo Library
+            </button>
+            <button type="button" className="sheet-source-pill" onClick={() => fileInputRef.current?.click()}>
+              Files
+            </button>
+          </div>
         </div>
       </div>
 

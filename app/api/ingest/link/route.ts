@@ -1,6 +1,6 @@
 import { badRequest, ok } from "@/lib/api/http";
 import { socialLinkBodySchema } from "@/lib/api/schemas";
-import { ingestSocialFlow } from "@/lib/services/ingestService";
+import { ingestLinkFlow } from "@/lib/services/ingestService";
 
 export const runtime = "nodejs";
 
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     return badRequest("Invalid social link payload.", parsed.error.flatten());
   }
 
-  const response = await ingestSocialFlow({
+  const response = await ingestLinkFlow({
     userId: parsed.data.userId ?? "demo-user",
     url: parsed.data.url,
   });

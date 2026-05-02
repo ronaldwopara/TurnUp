@@ -20,7 +20,6 @@ import {
   tierFromSliderPercent,
   sliderPercentForTier,
   upcomingSaturday,
-  type University,
   type AmenityId,
   type EventItem,
   type AppliedDateFilter,
