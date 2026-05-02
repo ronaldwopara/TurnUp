@@ -23,8 +23,9 @@ import {
   buildExportDataMailto,
   clearDeckStorage,
   hasDeckCredentials,
+  clearUserProfile,
 } from "@/lib/discoveries-store";
-import { setPermissionStep } from "@/lib/onboarding-perms";
+import { clearPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
 
 import { DiscoveriesStack, type DiscoveryStackItem } from "./DiscoveriesStack";
 
@@ -331,6 +332,22 @@ export default function ProfilePage() {
     window.location.href = buildExportDataMailto();
   };
 
+  const deleteProfileData = () => {
+    if (typeof window === "undefined") return;
+    const ok = window.confirm("Delete your TurnUp profile data from this device?");
+    if (!ok) return;
+
+    clearDeckStorage();
+    clearUserProfile();
+    clearPermissionStep();
+    try {
+      localStorage.removeItem("turnup_google_connected");
+    } catch {
+      // ignore
+    }
+    router.push("/");
+  };
+
   return (
     <div className="browse-page profile-page">
       <div className="profile-header-row">
@@ -460,7 +477,7 @@ export default function ProfilePage() {
             <button
               type="button"
               className="profile-settings-row profile-settings-row--destructive"
-              onClick={() => alert("Delete profile data")}
+              onClick={deleteProfileData}
             >
               <span>Delete profile data</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>

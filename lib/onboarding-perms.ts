@@ -20,3 +20,12 @@ export function setPermissionStep(step: number): void {
     /* ignore */
   }
 }
+
+export function clearPermissionStep(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    /* ignore */
+  }
+}

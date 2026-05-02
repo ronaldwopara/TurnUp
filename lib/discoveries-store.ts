@@ -179,6 +179,15 @@ export function setUserProfile(profile: UserProfile): void {
   }
 }
 
+export function clearUserProfile(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.PROFILE);
+  } catch {
+    // ignore localStorage write failures
+  }
+}
+
 // ─── Combined discovery count ─────────────────────────────────────────────────
 
 export function getDiscoveryCount(): number {
