@@ -122,17 +122,281 @@
       border-radius: 2px; margin: 0 auto 20px;
     }
     .sheet-title { color: #fff; font-size: 17px; font-weight: 700; margin-bottom: 20px; letter-spacing: -0.3px; }
+
+    /* Upload sheet — quick upload above library/files pills */
+    .sheet-upload-section {
+      margin-bottom: 22px;
+    }
+    .sheet-upload-heading {
+      color: rgba(255,255,255,0.55);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .sheet-upload-field-root {
+      position: relative;
+    }
+    .sheet-upload-field-input {
+      position: absolute;
+      width: 0;
+      height: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .sheet-upload-field-zone {
+      position: relative;
+      width: 100%;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 2px dashed rgba(255,255,255,0.22);
+      background: rgba(255,255,255,0.04);
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .sheet-upload-field-zone:hover:not(.sheet-upload-field-zone--disabled) {
+      border-color: rgba(255,255,255,0.42);
+      background: rgba(255,255,255,0.06);
+    }
+    .sheet-upload-field-zone:focus-visible {
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.2);
+    }
+    .sheet-upload-field-zone--filled {
+      border-style: solid;
+      border-color: rgba(255,255,255,0.22);
+    }
+    .sheet-upload-field-zone--error {
+      border-color: rgba(255,120,120,0.65);
+    }
+    .sheet-upload-field-zone--disabled {
+      pointer-events: none;
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .sheet-upload-field-preview {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .sheet-upload-field-hover {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.5);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+    }
+    .sheet-upload-field-zone:hover:not(.sheet-upload-field-zone--disabled) .sheet-upload-field-hover {
+      opacity: 1;
+    }
+    .sheet-upload-field-hover-icon {
+      color: rgba(255,255,255,0.85);
+      width: 36px;
+      height: 36px;
+    }
+    .sheet-upload-field-remove {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      background: rgba(26,26,26,0.82);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: rgba(255,255,255,0.85);
+      transition: background 0.15s ease;
+      z-index: 2;
+    }
+    .sheet-upload-field-remove:hover {
+      background: rgba(40,40,40,0.92);
+    }
+    .sheet-upload-field-remove-icon {
+      display: block;
+    }
+    .sheet-upload-field-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 20px 16px;
+      min-height: 100%;
+      text-align: center;
+    }
+    .sheet-upload-field-empty-icon {
+      color: rgba(255,255,255,0.45);
+      width: 36px;
+      height: 36px;
+    }
+    .sheet-upload-field-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .sheet-upload-field-title {
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+    }
+    .sheet-upload-field-sub {
+      color: rgba(255,255,255,0.38);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .sheet-upload-field-error-badge {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #ffb4b4;
+      background: rgba(255,80,80,0.12);
+      z-index: 2;
+    }
+    .sheet-upload-field-error-icon {
+      flex-shrink: 0;
+    }
+    @keyframes sheet-upload-skel-pulse {
+      50% { opacity: 0.45; }
+    }
+    .sheet-upload-skeleton {
+      width: 100%;
+      border-radius: 14px;
+      border: 2px dashed rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      animation: sheet-upload-skel-pulse 1.4s ease-in-out infinite;
+    }
+
     .sheet-options { display: flex; flex-direction: column; gap: 4px; }
+    .sheet-options-links-row {
+      flex-direction: row;
+      gap: 20px;
+      justify-content: center;
+      align-items: stretch;
+      flex-wrap: nowrap;
+    }
     .sheet-option {
       display: flex; align-items: center; gap: 16px;
       padding: 16px; border-radius: 14px; background: rgba(255,255,255,0.05);
       cursor: pointer; border: none; width: 100%; text-align: left;
     }
-    .sheet-option:hover { background: rgba(255,255,255,0.09); }
+    .sheet-option-pill {
+      flex: 0 1 auto;
+      width: auto;
+      min-width: 0;
+      max-width: 148px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.04);
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sheet-option-pill.sheet-option-pill--socials {
+      gap: 14px;
+    }
+    .sheet-option-pill--event .sheet-option-text {
+      padding-right: 1px;
+    }
+    .sheet-option-pill.sheet-option-pill--upload {
+      justify-content: center;
+      text-align: center;
+      padding: 10px 16px;
+    }
+    .sheet-option-pill .sheet-option-title {
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .sheet-option:hover:not(.sheet-option-pill) { background: rgba(255,255,255,0.09); }
+    .sheet-option-pill:hover { background: rgba(255,255,255,0.08); }
     .sheet-option-icon {
       width: 44px; height: 44px; border-radius: 12px;
       background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
+    }
+    .sheet-option-icon.sheet-option-icon-pill-sub {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+    }
+    /* Fanned “social cards” favicon stack (Socials) */
+    .socials-card-fan {
+      position: relative;
+      width: 48px;
+      height: 30px;
+      flex-shrink: 0;
+    }
+    .socials-card-fan__card {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      bottom: 1px;
+      left: 50%;
+      margin-left: -11px;
+      border-radius: 6px;
+      border: 2px solid rgba(255,255,255,0.95);
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      overflow: hidden;
+      transform-origin: 50% 100%;
+      pointer-events: none;
+    }
+    .socials-card-fan__card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Event page — ticket platforms (matches Socials fan pattern) */
+    .event-page-card-fan {
+      position: relative;
+      width: 46px;
+      height: 30px;
+      flex-shrink: 0;
+    }
+    .event-page-card-fan__card {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      bottom: 1px;
+      left: 50%;
+      margin-left: -11px;
+      border-radius: 6px;
+      border: 2px solid rgba(255,255,255,0.95);
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      overflow: hidden;
+      transform-origin: 50% 100%;
+      pointer-events: none;
+    }
+    .event-page-card-fan__card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
     .sheet-option-text { display: flex; flex-direction: column; gap: 2px; }
     .sheet-option-title { color: #fff; font-size: 15px; font-weight: 600; }

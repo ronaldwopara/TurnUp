@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+
+import { ImageUploadField } from "./ImageUploadField";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLink } from "@fortawesome/free-solid-svg-icons";
+import { addCapture } from "@/lib/discoveries-store";
 
 const byPrefixAndName = {
   fas: {
@@ -51,9 +54,108 @@ function LinksIcon() {
   );
 }
 
+/**
+ * Direct site favicons often fail in <img> because hosts send Cross-Origin-Resource-Policy: same-origin
+ * (Instagram does). Google’s favicon service returns cross-origin-embeddable PNGs.
+ */
+function socialFaviconSrc(domain: string) {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+}
+
+const SOCIAL_FAVICONS = [
+  { id: "instagram", domain: "instagram.com", alt: "Instagram" },
+  { id: "snapchat", domain: "snapchat.com", alt: "Snapchat" },
+  { id: "linkedin", domain: "linkedin.com", alt: "LinkedIn" },
+  { id: "facebook", domain: "facebook.com", alt: "Facebook" },
+  { id: "tiktok", domain: "tiktok.com", alt: "TikTok" },
+] as const;
+
+const SOCIAL_FAN_TRANSFORMS = [
+  { x: -16, deg: -18, z: 1 },
+  { x: -8, deg: -9, z: 2 },
+  { x: 0, deg: 0, z: 5 },
+  { x: 8, deg: 9, z: 3 },
+  { x: 16, deg: 18, z: 4 },
+] as const;
+
+function SocialsCardFan() {
+  return (
+    <div className="socials-card-fan" aria-hidden>
+      {SOCIAL_FAVICONS.map((s, i) => {
+        const t = SOCIAL_FAN_TRANSFORMS[i];
+        return (
+          <div
+            key={s.id}
+            className="socials-card-fan__card"
+            style={{
+              zIndex: t.z,
+              transform: `translateX(${t.x}px) rotate(${t.deg}deg)`,
+            }}
+          >
+            <img
+              src={socialFaviconSrc(s.domain)}
+              alt=""
+              width={20}
+              height={20}
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const EVENT_PAGE_FAVICONS = [
+  { id: "eventbrite", domain: "eventbrite.ca", alt: "Eventbrite" },
+  { id: "luma", domain: "luma.com", alt: "Luma" },
+  { id: "ticketmaster", domain: "ticketmaster.com", alt: "Ticketmaster" },
+  { id: "posh", domain: "posh.vip", alt: "Posh" },
+] as const;
+
+const EVENT_FAN_TRANSFORMS = [
+  { x: -14, deg: -17, z: 1 },
+  { x: -5, deg: -8, z: 3 },
+  { x: 5, deg: 8, z: 4 },
+  { x: 14, deg: 17, z: 2 },
+] as const;
+
+function EventPageCardFan() {
+  return (
+    <div className="event-page-card-fan" aria-hidden>
+      {EVENT_PAGE_FAVICONS.map((s, i) => {
+        const t = EVENT_FAN_TRANSFORMS[i];
+        return (
+          <div
+            key={s.id}
+            className="event-page-card-fan__card"
+            style={{
+              zIndex: t.z,
+              transform: `translateX(${t.x}px) rotate(${t.deg}deg)`,
+            }}
+          >
+            <img
+              src={socialFaviconSrc(s.domain)}
+              alt=""
+              width={20}
+              height={20}
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CameraPage() {
   const router = useRouter();
   const [sheet, setSheet] = useState<"uploads" | "links" | null>(null);
+  const [sheetUploadImage, setSheetUploadImage] = useState<File | string | null>(null);
 
   const openSheet = (type: "uploads" | "links") => setSheet(type);
   const closeSheet = () => setSheet(null);
@@ -71,7 +173,7 @@ export default function CameraPage() {
           </svg>
           Browse Events
         </button>
-        <button type="button" className="cam-profile">
+        <button type="button" className="cam-profile" onClick={() => router.push("/profile")}>
           <div className="cam-profile-icon">
             <ProfileIcon />
           </div>
@@ -93,20 +195,26 @@ export default function CameraPage() {
       <div className={`bottom-sheet${sheet === "uploads" ? " open" : ""}`}>
         <div className="sheet-handle" />
         <div className="sheet-title">Add uploads</div>
-        <div className="sheet-options">
-          {[
-            { icon: "🖼", title: "Photo Library", sub: "Choose from your camera roll" },
-            { icon: "📁", title: "Files", sub: "Browse documents and files" },
-            { icon: "📷", title: "Take Photo", sub: "Snap a new image now" },
-          ].map((o) => (
-            <button type="button" className="sheet-option" key={o.title} onClick={closeSheet}>
-              <div className="sheet-option-icon">
-                <span style={{ fontSize: 20 }}>{o.icon}</span>
-              </div>
-              <div className="sheet-option-text">
-                <span className="sheet-option-title">{o.title}</span>
-                <span className="sheet-option-sub">{o.sub}</span>
-              </div>
+        <div className="sheet-upload-section">
+          <p className="sheet-upload-heading">From your device</p>
+          <ImageUploadField
+            value={sheetUploadImage}
+            onChange={setSheetUploadImage}
+            aspectRatio={2.1}
+            onCaptureSave={(dataUrl) => {
+              addCapture(dataUrl);
+            }}
+          />
+        </div>
+        <div className="sheet-options sheet-options-links-row">
+          {(["Photo Library", "Files"] as const).map((title) => (
+            <button
+              type="button"
+              className="sheet-option sheet-option-pill sheet-option-pill--upload"
+              key={title}
+              onClick={closeSheet}
+            >
+              <span className="sheet-option-title">{title}</span>
             </button>
           ))}
         </div>
@@ -116,22 +224,27 @@ export default function CameraPage() {
         <div className="sheet-handle" />
         <div className="sheet-title">Insert link</div>
         <input className="sheet-input" placeholder="Paste a URL here..." />
-        <div className="sheet-options">
-          {[
-            { icon: "🎟", title: "Ticket link", sub: "Link to buy or register" },
-            { icon: "📍", title: "Venue link", sub: "Google Maps or address" },
-            { icon: "🔗", title: "Event page", sub: "Any external event link" },
-          ].map((o) => (
-            <button type="button" className="sheet-option" key={o.title} onClick={closeSheet}>
-              <div className="sheet-option-icon">
-                <span style={{ fontSize: 20 }}>{o.icon}</span>
-              </div>
-              <div className="sheet-option-text">
-                <span className="sheet-option-title">{o.title}</span>
-                <span className="sheet-option-sub">{o.sub}</span>
-              </div>
-            </button>
-          ))}
+        <div className="sheet-options sheet-options-links-row">
+          <button
+            type="button"
+            className="sheet-option sheet-option-pill sheet-option-pill--socials"
+            onClick={closeSheet}
+          >
+            <SocialsCardFan />
+            <div className="sheet-option-text">
+              <span className="sheet-option-title">Socials</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="sheet-option sheet-option-pill sheet-option-pill--event"
+            onClick={closeSheet}
+          >
+            <EventPageCardFan />
+            <div className="sheet-option-text">
+              <span className="sheet-option-title">Event page</span>
+            </div>
+          </button>
         </div>
         <button type="button" className="sheet-btn" style={{ marginTop: 16 }} onClick={closeSheet}>
           Insert

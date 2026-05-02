@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, type CSSProperties, type MouseEvent, type TouchEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type TouchEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   TweakColor,
   TweakSection,
@@ -10,8 +10,11 @@ import {
   useTweaks,
 } from "@/components/tweaks-panel";
 
+import { getUserProfile, setUserProfile } from "@/lib/discoveries-store";
+import { getPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
+
 const EVENT_WORDS = [
-  "world",
+  "tribe",
   "festival",
   "run club",
   "art show",
@@ -26,6 +29,7 @@ const EVENT_WORDS = [
   "study hall",
   "showcase",
   "open house",
+  "date night"
 ];
 
 function CyclingWord({
@@ -265,13 +269,33 @@ function Slide3() {
   );
 }
 
-const TOASTS = [
-  { msg: "You can still discover events anywhere. Turn on location for what's near you.", color: "slide1" },
-  { msg: "Be the first to know. Never miss what's happening.", color: "slide2" },
-  { msg: "Snap posters, capture moments, and create events in seconds.", color: "slide3" },
+const PERMISSION_TOAST_MSGS = [
+  "You can still discover events anywhere. Turn on location for what's near you.",
+  "Be the first to know. Never miss what's happening.",
+  "Snap posters, capture moments, and create events in seconds.",
 ];
 
-type ToastItem = { msg: string; color: string; key?: number };
+/** Toast chrome follows the visible onboarding slide (0 = accent from tweaks, 1 = red slide, 2 = green slide). */
+type ToastItem = {
+  msg: string;
+  slideIndex: number;
+  accentColor?: string;
+  key?: number;
+};
+
+/** Dominant colours from each slide — must stay in sync with Slide1 accent / Slide2 & Slide3 headline colours */
+function toastBackgroundForSlide(toast: ToastItem): string {
+  switch (toast.slideIndex) {
+    case 0:
+      return toast.accentColor ?? "#6366f1";
+    case 1:
+      return "#f87171";
+    case 2:
+      return "#4ade80";
+    default:
+      return "#6366f1";
+  }
+}
 
 function Toaster({ toast }: { toast: ToastItem | null }) {
   const [phase, setPhase] = useState("hidden");
@@ -291,11 +315,12 @@ function Toaster({ toast }: { toast: ToastItem | null }) {
 
   if (!toast || phase === "hidden") return null;
 
+  const motion = phase === "visible" ? " visible" : phase === "exit" ? " exit" : "";
+  const bgStyle: CSSProperties = { background: toastBackgroundForSlide(toast) };
+
   return (
     <div className="toaster-wrap">
-      <div
-        className={`toaster ${toast.color}${phase === "visible" ? " visible" : phase === "exit" ? " exit" : ""}`}
-      >
+      <div className={`toaster${motion}`} style={bgStyle}>
         {toast.msg}
       </div>
     </div>
@@ -308,7 +333,7 @@ type TweakDefaults = {
   headlineSize: number;
 };
 
-function PhoneScreen() {
+function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
   const router = useRouter();
   const [tweaks, setTweak] = useTweaks<TweakDefaults>({
     lightOffset: -8,
@@ -325,8 +350,21 @@ function PhoneScreen() {
   ];
 
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [permStep, setPermStep] = useState(0);
+  const [permStep, setPermStepState] = useState(0);
   const [activeToast, setActiveToast] = useState<ToastItem | null>(null);
+
+  useEffect(() => {
+    setPermStepState(getPermissionStep());
+  }, []);
+
+  const setPermStep = (updater: number | ((p: number) => number)) => {
+    setPermStepState((prev) => {
+      const next = typeof updater === "function" ? (updater as (p: number) => number)(prev) : updater;
+      const clamped = Math.max(0, Math.min(PERMISSION_STEPS.length - 1, next));
+      setPermissionStep(clamped);
+      return clamped;
+    });
+  };
 
   const goToSlide = (idx: number) => {
     const clamped = Math.max(0, Math.min(TOTAL_SLIDES - 1, idx));
@@ -334,17 +372,18 @@ function PhoneScreen() {
   };
 
   const handleTap = (e: MouseEvent<HTMLDivElement> | TouchEvent<HTMLDivElement>) => {
-    let x: number | undefined;
+    let clientX: number | undefined;
     if ("changedTouches" in e && e.changedTouches?.length) {
-      x = e.changedTouches[0].clientX;
+      clientX = e.changedTouches[0].clientX;
     } else if ("touches" in e && e.touches?.length) {
-      x = e.touches[0].clientX;
+      clientX = e.touches[0].clientX;
     } else if ("clientX" in e) {
-      x = e.clientX;
+      clientX = e.clientX;
     }
-    if (x == null) return;
-    const w = e.currentTarget.offsetWidth;
-    if (x < w / 2) {
+    if (clientX == null) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    if (localX < rect.width / 2) {
       goToSlide(currentSlide - 1);
     } else {
       goToSlide(currentSlide + 1);
@@ -394,28 +433,51 @@ function PhoneScreen() {
         <Slide3 />
       </div>
 
-      <div
-        className="logo"
-        onClick={(e) => e.stopPropagation()}
-        onTouchEnd={(e) => e.stopPropagation()}
-      >
-        <span className="logo-name">TurnUp</span>
-        <span className="logo-tagline">
-          events for students,
-          <br />
-          by students
-        </span>
-      </div>
-
-      <ProgressBars total={TOTAL_SLIDES} current={currentSlide} />
+      {fromProfile ? (
+        <header className="perms-header-shell">
+          <div className="perms-progress-slot">
+            <ProgressBars total={TOTAL_SLIDES} current={currentSlide} />
+          </div>
+          <div className="perms-brand-row">
+            <button
+              type="button"
+              className="perms-back-pill"
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push("/profile");
+              }}
+              onTouchEnd={(e) => e.stopPropagation()}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M15 6l-6 6 6 6" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Profile
+            </button>
+            <span className="perms-brand-title">TurnUp</span>
+            <span className="perms-brand-tagline">
+              events for students,
+              <br />
+              by students
+            </span>
+          </div>
+        </header>
+      ) : (
+        <>
+          <div className="logo">
+            <span className="logo-name">TurnUp</span>
+            <span className="logo-tagline">
+              events for students,
+              <br />
+              by students
+            </span>
+          </div>
+          <ProgressBars total={TOTAL_SLIDES} current={currentSlide} />
+        </>
+      )}
 
       <Toaster toast={activeToast} />
 
-      <div
-        className="bottom-actions"
-        onClick={(e) => e.stopPropagation()}
-        onTouchEnd={(e) => e.stopPropagation()}
-      >
+      <div className="bottom-actions">
         <div className="uni-input-wrap">
           <input
             className="uni-input"
@@ -423,20 +485,28 @@ function PhoneScreen() {
             placeholder={PERMISSION_STEPS[Math.min(permStep, PERMISSION_STEPS.length - 1)].btn}
             readOnly
             style={{ cursor: "pointer" }}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               if (permStep === PERMISSION_STEPS.length - 1) {
                 goCamera();
               } else {
                 setPermStep((p) => p + 1);
               }
             }}
+            onTouchEnd={(e) => e.stopPropagation()}
           />
         </div>
         <button
           type="button"
           className="browse-btn"
-          onClick={() => {
-            setActiveToast({ ...TOASTS[permStep], key: Date.now() });
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveToast({
+              msg: PERMISSION_TOAST_MSGS[permStep],
+              slideIndex: currentSlide,
+              accentColor,
+              key: Date.now(),
+            });
             if (permStep < PERMISSION_STEPS.length - 1) {
               setPermStep((p) => p + 1);
             } else {
@@ -445,6 +515,7 @@ function PhoneScreen() {
               }, 400);
             }
           }}
+          onTouchEnd={(e) => e.stopPropagation()}
         >
           Not now
         </button>
@@ -477,6 +548,176 @@ function PhoneScreen() {
   );
 }
 
+// ─── Gallery screen ──────────────────────────────────────────────────────────
+
+const GALLERY_IMAGES: { id: number; src: string; tilt: number }[] = [
+  { id: 1, tilt: -12, src: "https://images.pexels.com/photos/32025694/pexels-photo-32025694/free-photo-of-romantic-wedding-in-ancient-ruins.jpeg?auto=compress&cs=tinysrgb&w=400" },
+  { id: 2, tilt:   6, src: "https://images.pexels.com/photos/31596551/pexels-photo-31596551/free-photo-of-winter-scene-with-lake-view-in-van-turkiye.jpeg?auto=compress&cs=tinysrgb&w=400" },
+  { id: 3, tilt:  10, src: "https://images.pexels.com/photos/31890053/pexels-photo-31890053/free-photo-of-moody-portrait-with-heart-shaped-light.jpeg?auto=compress&cs=tinysrgb&w=400" },
+  { id: 4, tilt:  -5, src: "https://images.pexels.com/photos/19936068/pexels-photo-19936068/free-photo-of-women-sitting-on-hilltop-with-clouds-below.jpeg?auto=compress&cs=tinysrgb&w=400" },
+  { id: 5, tilt:  -8, src: "https://images.pexels.com/photos/20494995/pexels-photo-20494995/free-photo-of-head-of-peacock.jpeg?auto=compress&cs=tinysrgb&w=400" },
+  { id: 6, tilt:  14, src: "https://images.pexels.com/photos/32025694/pexels-photo-32025694/free-photo-of-romantic-wedding-in-ancient-ruins.jpeg?auto=compress&cs=tinysrgb&w=400" },
+  { id: 7, tilt:  -3, src: "https://images.pexels.com/photos/31890053/pexels-photo-31890053/free-photo-of-moody-portrait-with-heart-shaped-light.jpeg?auto=compress&cs=tinysrgb&w=400" },
+];
+
+const ORBIT_RADIUS = 105;
+const ORBIT_SPEED = 0.018;
+
+type GalleryRole = "student" | "organiser";
+
+function GalleryScreen({ onDone }: { onDone: () => void }) {
+  const [ready, setReady] = useState(false);
+  const [exiting, setExiting] = useState(false);
+  const [university, setUniversity] = useState("");
+  const [name, setName] = useState("");
+  const [schoolEmail, setSchoolEmail] = useState("");
+  const [role, setRole] = useState<GalleryRole>("student");
+  const [dataPrivacyAccepted, setDataPrivacyAccepted] = useState(false);
+  const [orbitAngle, setOrbitAngle] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 400);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    let raf: number;
+    let last = 0;
+    const tick = (now: number) => {
+      if (last) {
+        const dt = now - last;
+        setOrbitAngle((a) => (a + dt * ORBIT_SPEED) % 360);
+      }
+      last = now;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const handleContinue = () => {
+    if (!dataPrivacyAccepted) return;
+    const prev = getUserProfile();
+    setUserProfile({
+      ...(prev ?? {}),
+      name: name.trim() || prev?.name || "",
+      university: university.trim() || prev?.university || "",
+      schoolEmail: schoolEmail.trim() || prev?.schoolEmail,
+      role,
+      dataPrivacyAccepted: true,
+    });
+    setExiting(true);
+    setTimeout(onDone, 650);
+  };
+
+  const total = GALLERY_IMAGES.length;
+
+  return (
+    <div className={`gallery-screen${exiting ? " gallery-screen--exit" : ""}`}>
+      {/* Orbiting photo carousel */}
+      <div className={`gallery-orbit${ready ? " gallery-orbit--visible" : ""}`}>
+        {GALLERY_IMAGES.map((img, i) => {
+          const deg = orbitAngle + (i * 360) / total;
+          const rad = (deg * Math.PI) / 180;
+          const x = Math.cos(rad) * ORBIT_RADIUS;
+          const y = Math.sin(rad) * ORBIT_RADIUS * 0.55;
+          const depth = Math.sin(rad);
+          const scale = 0.78 + (depth + 1) * 0.12;
+          return (
+            <div
+              key={img.id}
+              className="gallery-card"
+              style={{
+                transform: `translate(${x}px, ${y}px) rotate(${img.tilt}deg) scale(${scale})`,
+                opacity: 0.5 + (depth + 1) * 0.25,
+                zIndex: Math.round((depth + 1) * 10),
+              } as CSSProperties}
+            >
+              <img src={img.src} alt="" className="gallery-card-img" draggable={false} decoding="async" />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Lower section — text + form */}
+      <div className={`gallery-lower${ready ? " gallery-lower--visible" : ""}`}>
+        <div className="gallery-text">
+          <h1 className="gallery-heading">Welcome to TurnUp</h1>
+          <p className="gallery-sub">events for students, by students</p>
+        </div>
+
+        <div className="gallery-form">
+          <input
+            className="gallery-input"
+            type="text"
+            placeholder="Enter your University"
+            value={university}
+            onChange={(e) => setUniversity(e.target.value)}
+            autoComplete="organization"
+          />
+          <input
+            className="gallery-input"
+            type="text"
+            placeholder="Enter your Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="given-name"
+          />
+          <input
+            className="gallery-input"
+            type="email"
+            placeholder="School email"
+            value={schoolEmail}
+            onChange={(e) => setSchoolEmail(e.target.value)}
+            autoComplete="email"
+          />
+
+          <div className="gallery-role-row">
+            <button
+              type="button"
+              className={`gallery-role-btn${role === "organiser" ? " gallery-role-btn--active" : ""}`}
+              onClick={() => setRole("organiser")}
+            >
+              Organiser
+            </button>
+            <button
+              type="button"
+              className={`gallery-role-btn${role === "student" ? " gallery-role-btn--active" : ""}`}
+              onClick={() => setRole("student")}
+            >
+              Student
+            </button>
+          </div>
+
+          <label className="gallery-consent-row">
+            <input
+              type="checkbox"
+              className="gallery-consent-check"
+              checked={dataPrivacyAccepted}
+              onChange={(e) => setDataPrivacyAccepted(e.target.checked)}
+            />
+            <span className="gallery-consent-label">Data &amp; privacy — I agree to TurnUp&apos;s use of my information.</span>
+          </label>
+
+          <button
+            type="button"
+            className={`gallery-cta${ready ? " gallery-cta--visible" : ""}`}
+            onClick={handleContinue}
+            disabled={!dataPrivacyAccepted}
+          >
+            Get Started
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── IntroScreen ─────────────────────────────────────────────────────────────
+
+const INTRO_PARTNER_LOGO_URL =
+  "https://res.cloudinary.com/drabss9om/image/upload/q_auto/f_auto/v1777704719/Gemini_Generated_Image_zbdgl3zbdgl3zbdg_u5syxq.jpg";
+
 function IntroScreen({ onDone }: { onDone: () => void }) {
   const [logoVisible, setLogoVisible] = useState(false);
   const [fadeOut, setFadeOut] = useState(false);
@@ -497,26 +738,52 @@ function IntroScreen({ onDone }: { onDone: () => void }) {
       <span className={`intro-logo${logoVisible ? " visible" : ""}`}>TurnUp</span>
       <span className={`intro-by${logoVisible ? " visible" : ""}`}>by</span>
       <div className={`intro-partner-logo${logoVisible ? " visible" : ""}`}>
-        <span>your logo here</span>
+        <img
+          src={INTRO_PARTNER_LOGO_URL}
+          alt=""
+          className="intro-partner-logo-img"
+          width={400}
+          height={160}
+          decoding="async"
+        />
       </div>
     </div>
   );
 }
 
 export default function SplashApp() {
-  const [introDone, setIntroDone] = useState(false);
+  const searchParams = useSearchParams();
+  const resumeHandled = useRef(false);
+  const [stage, setStage] = useState<"intro" | "gallery" | "main">("intro");
   const [mainVisible, setMainVisible] = useState(false);
+  const [fromProfile, setFromProfile] = useState(false);
 
-  const handleIntroDone = useCallback(() => {
-    setIntroDone(true);
-    setTimeout(() => setMainVisible(true), 100);
+  const resumePermissionsIntent = searchParams.get("resume") === "permissions";
+
+  useEffect(() => {
+    if (!resumePermissionsIntent) {
+      resumeHandled.current = false;
+      return;
+    }
+    if (resumeHandled.current) return;
+    resumeHandled.current = true;
+    setFromProfile(true);
+    setStage("main");
+    setTimeout(() => setMainVisible(true), 80);
+  }, [resumePermissionsIntent]);
+
+  const handleIntroDone = useCallback(() => setStage("gallery"), []);
+  const handleGalleryDone = useCallback(() => {
+    setStage("main");
+    setTimeout(() => setMainVisible(true), 80);
   }, []);
 
   return (
     <div className="mobile-frame">
-      {!introDone && <IntroScreen onDone={handleIntroDone} />}
+      {stage === "intro" && <IntroScreen onDone={handleIntroDone} />}
+      {stage === "gallery" && <GalleryScreen onDone={handleGalleryDone} />}
       <div className={`main-wrap${mainVisible ? " visible" : ""}`}>
-        <PhoneScreen />
+        <PhoneScreen fromProfile={fromProfile} />
       </div>
     </div>
   );

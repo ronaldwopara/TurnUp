@@ -111,7 +111,7 @@
       pointer-events: none;
     }
 
-    /* Logo */
+    /* Logo — pointer-events none so left/right slide taps reach .phone-screen */
     .logo {
       position: absolute;
       top: 48px;
@@ -121,6 +121,7 @@
       display: flex;
       align-items: baseline;
       justify-content: space-between;
+      pointer-events: none;
     }
 
     .logo-name {
@@ -218,6 +219,7 @@
       z-index: 20;
       display: flex;
       gap: 6px;
+      pointer-events: none;
     }
     .progress-bar-track {
       flex: 1;
@@ -283,7 +285,7 @@
       align-items: center;
     }
 
-    /* Bottom actions */
+    /* Bottom actions — wrapper ignores taps so slide navigation works; controls stay interactive */
     .bottom-actions {
       position: absolute;
       bottom: 52px;
@@ -294,11 +296,13 @@
       flex-direction: column;
       gap: 16px;
       align-items: center;
+      pointer-events: none;
     }
 
     .uni-input-wrap {
       width: 100%;
       position: relative;
+      pointer-events: auto;
     }
 
     .uni-input {
@@ -330,6 +334,7 @@
       letter-spacing: -0.2px;
       cursor: pointer;
       padding: 4px 0;
+      pointer-events: auto;
     }
 
     /* ── Toasters ── */
@@ -365,9 +370,259 @@
       transform: translateX(-110%);
       transition: opacity 0.32s ease, transform 0.32s cubic-bezier(0.4,0,1,1);
     }
-    .toaster.slide1 { background: #b91c1c; }
-    .toaster.slide2 { background: #c9940a; }
-    .toaster.slide3 { background: #2d6a4f; }
+
+    /* ── Gallery screen ────────────────────────────────────────────── */
+    /* Scroll the full page: orbit + form. Flex column + overflow:hidden was
+       trapping the lower section at ~58vh and clipping the CTA. */
+    .gallery-screen {
+      position: absolute;
+      inset: 0;
+      background: #000;
+      z-index: 100;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none; /* legacy Edge */
+      opacity: 1;
+      transition: opacity 0.65s ease;
+    }
+    .gallery-screen::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+    .gallery-screen--exit {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Orbiting carousel — centered ellipse */
+    .gallery-orbit {
+      position: relative;
+      width: 100%;
+      height: clamp(240px, 36vh, 300px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    .gallery-orbit--visible {
+      opacity: 1;
+    }
+
+    .gallery-card {
+      position: absolute;
+      width: 80px;
+      height: 100px;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.3);
+      pointer-events: none;
+      will-change: transform, opacity;
+    }
+
+    .gallery-card-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* Lower section — text + form, comfortable spacing */
+    .gallery-lower {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      width: 100%;
+      padding: 12px 24px max(40px, calc(28px + env(safe-area-inset-bottom, 0px)));
+      gap: 14px;
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.55s ease 0.25s, transform 0.55s ease 0.25s;
+    }
+    .gallery-lower--visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .gallery-text {
+      text-align: center;
+      padding: 0;
+      margin-bottom: 4px;
+    }
+
+    .gallery-heading {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.7px;
+      color: #fff;
+      margin: 0 0 6px;
+      line-height: 1.15;
+    }
+
+    .gallery-sub {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.48);
+      letter-spacing: 0.1px;
+      margin: 0;
+      line-height: 1.45;
+    }
+
+    /* Form inputs + role toggle */
+    .gallery-form {
+      width: 100%;
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .gallery-input {
+      width: 100%;
+      padding: 16px 22px;
+      border-radius: 50px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      outline: none;
+      box-sizing: border-box;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .gallery-input::placeholder {
+      color: rgba(255,255,255,0.38);
+    }
+    .gallery-input:focus {
+      border-color: rgba(255,255,255,0.4);
+      background: rgba(255,255,255,0.12);
+    }
+
+    /* Organiser / Student toggle */
+    .gallery-role-row {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    .gallery-role-btn {
+      flex: 1;
+      padding: 15px 8px;
+      border-radius: 50px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.52);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    .gallery-role-btn--active {
+      background: #fff;
+      color: #000;
+      border-color: #fff;
+    }
+    .gallery-role-btn:not(.gallery-role-btn--active):hover {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .gallery-consent-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 4px 6px 0;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .gallery-consent-check {
+      margin-top: 3px;
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      accent-color: #fff;
+      cursor: pointer;
+    }
+
+    .gallery-consent-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.45;
+    }
+
+    /* Get Started — full width, centered with form */
+    .gallery-cta {
+      width: 100%;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px 24px;
+      border-radius: 999px;
+      border: none;
+      background: #fff;
+      color: #000;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      cursor: pointer;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.5s ease 0.55s, transform 0.5s ease 0.55s;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+      box-sizing: border-box;
+    }
+    .gallery-cta--visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .gallery-cta:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+    .gallery-cta:active {
+      transform: scale(0.96);
+      transition: transform 0.1s ease;
+    }
+
+    /* Short phones: tighter hero + form so less scrolling is needed */
+    @media (max-height: 740px) {
+      .gallery-orbit {
+        height: clamp(200px, 30vh, 260px);
+      }
+      .gallery-heading {
+        font-size: 22px;
+      }
+      .gallery-form {
+        gap: 11px;
+      }
+      .gallery-input {
+        padding: 14px 18px;
+        font-size: 14px;
+      }
+      .gallery-role-btn {
+        padding: 13px 8px;
+        font-size: 14px;
+      }
+    }
 
     .intro-screen {
       position: absolute;
@@ -417,10 +672,7 @@
     }
 
     .intro-partner-logo {
-      width: 80px;
-      height: 40px;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.15);
+      max-width: min(400px, 88vw);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -430,11 +682,92 @@
     .intro-partner-logo.visible {
       opacity: 1;
     }
-    .intro-partner-logo span {
+    .intro-partner-logo-img {
+      width: 100%;
+      max-height: 160px;
+      height: auto;
+      object-fit: contain;
+      display: block;
+      border-radius: 12px;
+    }
+
+    /* Permissions header (from profile): progress bars, then Left | centered TurnUp | tagline — same wrap as main logo */
+
+    .perms-header-shell {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      padding-top: max(10px, env(safe-area-inset-top, 0px));
+      padding-bottom: 10px;
+      /* No bar background — match default onboarding (logo sits on slide, no dark strip) */
+      pointer-events: none;
+    }
+
+    .perms-progress-slot .progress-bars {
+      position: relative;
+      top: auto;
+      left: auto;
+      right: auto;
+      width: auto;
+      margin: 6px 16px 14px;
+    }
+
+    .perms-brand-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center;
+      column-gap: 10px;
+      padding: 0 14px 2px;
+      pointer-events: auto;
+    }
+
+    .perms-brand-title {
+      grid-column: 2;
+      justify-self: center;
       font-family: 'DM Sans', sans-serif;
-      font-size: 10px;
-      color: rgba(255,255,255,0.25);
-      letter-spacing: 0.3px;
+      font-size: 17px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: -0.7px;
+      text-align: center;
+    }
+
+    .perms-brand-tagline {
+      grid-column: 3;
+      justify-self: end;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.55);
+      letter-spacing: 0.1px;
+      text-align: right;
+      line-height: 1.3;
+      max-width: 130px;
+    }
+
+    .perms-back-pill {
+      grid-column: 1;
+      justify-self: start;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .perms-back-pill:hover {
+      background: rgba(255, 255, 255, 0.16);
     }
 
     /* Main screen fade in */
