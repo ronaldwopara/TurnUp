@@ -350,7 +350,7 @@ export default function CameraPage() {
 
     ctx.drawImage(video, 0, 0, width, height);
     const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob((value) => resolve(value), "image/jpeg", 0.92)
+      canvas.toBlob((value) => resolve(value), "image/jpeg", 0.96)
     );
     if (!blob) {
       setStatusMessage("Photo capture failed. Please retry.");

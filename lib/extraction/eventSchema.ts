@@ -1,12 +1,24 @@
 import { z } from "zod";
 
+const optionalText = z
+  .string()
+  .nullable()
+  .optional()
+  .transform((value) => (value == null ? undefined : value));
+
 export const eventPayloadSchema = z.object({
   title: z.string().min(1),
-  date: z.string().optional(),
-  time: z.string().optional(),
-  location: z.string().optional(),
-  description: z.string().optional(),
-  confidence: z.number().min(0).max(1).default(0.5),
+  date: optionalText,
+  time: optionalText,
+  location: optionalText,
+  description: optionalText,
+  confidence: z
+    .number()
+    .min(0)
+    .max(1)
+    .nullable()
+    .optional()
+    .transform((value) => (value == null ? 0.5 : value)),
 });
 
 export const extractionResultSchema = z.object({

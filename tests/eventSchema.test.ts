@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCalendarPayload, eventPayloadSchema } from "../lib/extraction/eventSchema";
+import { buildCalendarPayload, eventPayloadSchema, extractionResultSchema } from "../lib/extraction/eventSchema";
 
 describe("event payload schema", () => {
   it("validates required title", () => {
@@ -13,6 +13,27 @@ describe("event payload schema", () => {
     });
 
     expect(parsed.success).toBe(true);
+  });
+
+  it("accepts null for optional event fields after normalization", () => {
+    const parsed = extractionResultSchema.safeParse({
+      extractedText: "Free pizza at noon",
+      event: {
+        title: "Welcome Week Mixer",
+        date: null,
+        time: null,
+        location: null,
+        description: null,
+        confidence: 0.72,
+      },
+      ambiguityNotes: [],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.event.date).toBeUndefined();
+      expect(parsed.data.event.description).toBeUndefined();
+      expect(parsed.data.event.confidence).toBe(0.72);
+    }
   });
 
   it("builds calendar links", () => {
