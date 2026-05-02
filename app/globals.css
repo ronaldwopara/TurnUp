@@ -1,0 +1,57 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  background: #111;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-frame {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+
+@media (min-width: 500px) {
+  body {
+    background: #0a0a0a;
+  }
+
+  .mobile-frame {
+    width: 390px;
+    height: 844px;
+    max-height: 100vh;
+    border-radius: 44px;
+    box-shadow:
+      0 40px 100px rgba(0, 0, 0, 0.7),
+      0 0 0 1px rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+  }
+}
+
+@media (min-height: 900px) and (min-width: 500px) {
+  .mobile-frame {
+    height: 844px;
+  }
+}

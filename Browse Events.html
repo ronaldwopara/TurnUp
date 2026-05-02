@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TurnUp — Browse Events</title>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #111; font-family: 'DM Sans', sans-serif; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    #root { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+
+    .mobile-frame {
+      width: 100%; height: 100%; position: relative; overflow: hidden; background: #000;
+    }
+    @media (min-width: 500px) {
+      body { background: #0a0a0a; }
+      .mobile-frame { width: 390px; height: 844px; max-height: 100vh; border-radius: 44px; box-shadow: 0 40px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08); overflow: hidden; }
+    }
+
+    /* Page */
+    .browse-page {
+      width: 100%; height: 100%; background: #000;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* Header */
+    .browse-header {
+      padding: 52px 20px 12px;
+      flex-shrink: 0;
+    }
+    .browse-title {
+      font-size: 32px; font-weight: 800; color: #fff;
+      letter-spacing: -1px; line-height: 1.1; margin-bottom: 14px;
+    }
+    .browse-title span {
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .city-caret {
+      display: inline-block; margin-left: 2px; opacity: 0.6;
+    }
+    .browse-filters {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .filter-pill {
+      padding: 8px 16px; border-radius: 50px;
+      background: #1a1a1a; border: none; color: #fff;
+      font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+    }
+    .filter-pill:hover { background: #222; }
+    .filter-spacer { flex: 1; }
+    .search-btn {
+      background: none; border: none; cursor: pointer; padding: 4px;
+    }
+
+    /* Masonry grid */
+    .masonry-scroll {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      padding: 8px 8px 32px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .masonry-scroll::-webkit-scrollbar { display: none; }
+    .masonry-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    /* Cards */
+    .event-card {
+      border-radius: 18px; overflow: hidden;
+      background: #1a1a1a; position: relative;
+      cursor: pointer; break-inside: avoid;
+    }
+    .event-card:active { transform: scale(0.98); }
+    .card-image {
+      width: 100%; background: #2a2a2a; position: relative;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .card-image-placeholder {
+      width: 100%; background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .card-dots-btn {
+      position: absolute; top: 8px; right: 8px;
+      background: rgba(0,0,0,0.45); border: none; border-radius: 50%;
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; z-index: 2;
+    }
+    .card-body { padding: 10px 12px 12px; }
+    .card-tag {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      color: rgba(255,255,255,0.45); letter-spacing: 0.5px;
+      text-transform: uppercase; margin-bottom: 4px;
+    }
+    .card-title {
+      font-size: 14px; font-weight: 700; color: #fff;
+      letter-spacing: -0.3px; line-height: 1.25; margin-bottom: 6px;
+    }
+    .card-date {
+      font-size: 12px; color: rgba(255,255,255,0.45); font-weight: 500; margin-bottom: 8px;
+    }
+    .card-action {
+      width: 100%; padding: 10px 0;
+      background: rgba(255,255,255,0.07); border: none; border-radius: 10px;
+      color: #fff; font-family: 'DM Sans', sans-serif;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .card-action:hover { background: rgba(255,255,255,0.12); }
+
+    /* Tall card (left col first) */
+    .card-tall .card-image-placeholder { height: 180px; }
+    .card-short .card-image-placeholder { height: 120px; }
+
+    /* Context menu */
+    .ctx-overlay {
+      position: absolute; inset: 0; z-index: 60; pointer-events: none;
+    }
+    .ctx-overlay.open { pointer-events: all; }
+    .ctx-menu {
+      position: absolute; background: #222; border-radius: 14px;
+      padding: 6px; min-width: 160px; z-index: 70;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      opacity: 0; transform: scale(0.92); transition: opacity 0.15s ease, transform 0.15s ease;
+      pointer-events: none;
+    }
+    .ctx-menu.open { opacity: 1; transform: scale(1); pointer-events: all; }
+    .ctx-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 10px; border: none;
+      background: none; color: #fff; width: 100%; text-align: left;
+      font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
+      cursor: pointer;
+    }
+    .ctx-item:hover { background: rgba(255,255,255,0.08); }
+    .ctx-item.destructive { color: #ff4444; }
+  </style>
+</head>
+<body>
+<script type="text/babel">
+const { useState, useRef } = React;
+
+const EVENTS = [
+  { id: 1, title: 'Rooftop Jazz & Wine Night', tag: 'Music', date: 'Fri May 9 · 8pm', color: '#1a1230', accent: '#9b72cf', tall: true },
+  { id: 2, title: 'Campus Art Showcase', tag: 'Art', date: 'Sat May 10 · 2pm', color: '#0d1f14', accent: '#4ade80', tall: true },
+  { id: 3, title: 'Friday Night Run Club', tag: 'Fitness', date: 'Fri May 9 · 6am', color: '#1a0e0e', accent: '#f87171', tall: false },
+  { id: 4, title: 'Hackathon 2025', tag: 'Tech', date: 'May 11–12', color: '#0d1520', accent: '#60a5fa', tall: false },
+  { id: 5, title: 'Open Mic Night', tag: 'Performance', date: 'Thu May 8 · 7pm', color: '#1a1500', accent: '#fbbf24', tall: true },
+  { id: 6, title: 'Paint & Sip Social', tag: 'Art', date: 'Sun May 11 · 4pm', color: '#0f0d1a', accent: '#c084fc', tall: false },
+  { id: 7, title: 'Startup Mixer', tag: 'Networking', date: 'Wed May 14 · 6pm', color: '#0d1a1a', accent: '#2dd4bf', tall: false },
+  { id: 8, title: 'Block Party BBQ', tag: 'Social', date: 'Sat May 17 · 1pm', color: '#1a0f05', accent: '#fb923c', tall: true },
+];
+
+function GoogleCalIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="4" width="18" height="17" rx="2" stroke="white" strokeWidth="1.8"/>
+      <path d="M3 9h18" stroke="white" strokeWidth="1.8"/>
+      <path d="M8 2v4M16 2v4" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function DotsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
+      <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+    </svg>
+  );
+}
+
+function EventCard({ event, onDots }) {
+  const cls = event.tall ? 'event-card card-tall' : 'event-card card-short';
+  return (
+    <div className={cls}>
+      <div className="card-image">
+        <div className="card-image-placeholder" style={{ background: `linear-gradient(135deg, ${event.color} 0%, ${event.accent}22 100%)`, height: event.tall ? 180 : 120 }}>
+          <div style={{ width: 40, height: 40, borderRadius: '50%', background: event.accent + '33', border: `1px solid ${event.accent}44` }}></div>
+        </div>
+        <button className="card-dots-btn" onClick={e => { e.stopPropagation(); onDots(e, event.id); }}>
+          <DotsIcon />
+        </button>
+      </div>
+      <div className="card-body">
+        <span className="card-tag">{event.tag}</span>
+        <div className="card-title">{event.title}</div>
+        <div className="card-date">{event.date}</div>
+        <button className="card-action">
+          <GoogleCalIcon /> Add to Google Calendar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BrowsePage() {
+  const [ctxOpen, setCtxOpen] = useState(false);
+  const [ctxPos, setCtxPos] = useState({ x: 0, y: 0 });
+  const [ctxEventId, setCtxEventId] = useState(null);
+  const overlayRef = useRef(null);
+
+  const openCtx = (e, id) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frameRect = document.querySelector('.mobile-frame').getBoundingClientRect();
+    setCtxPos({ x: rect.left - frameRect.left - 120, y: rect.bottom - frameRect.top + 4 });
+    setCtxEventId(id);
+    setCtxOpen(true);
+  };
+  const closeCtx = () => setCtxOpen(false);
+
+  // Split events into two columns
+  const leftCol = EVENTS.filter((_, i) => i % 2 === 0);
+  const rightCol = EVENTS.filter((_, i) => i % 2 === 1);
+
+  return (
+    <div className="browse-page">
+      <div className="browse-header">
+        <div className="browse-title">
+          Find your world in<br />
+          <span>
+            New York
+            <svg className="city-caret" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </span>
+        </div>
+        <div className="browse-filters">
+          <button className="filter-pill">Date</button>
+          <button className="filter-pill">Price</button>
+          <div className="filter-spacer"></div>
+          <button className="search-btn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <circle cx="10.5" cy="10.5" r="6.5" stroke="white" strokeWidth="1.8"/>
+              <path d="M15.5 15.5L20 20" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="masonry-scroll">
+        <div className="masonry-grid">
+          {/* Left column */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {leftCol.map(ev => <EventCard key={ev.id} event={ev} onDots={openCtx} />)}
+          </div>
+          {/* Right column — offset slightly */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 28 }}>
+            {rightCol.map(ev => <EventCard key={ev.id} event={ev} onDots={openCtx} />)}
+          </div>
+        </div>
+      </div>
+
+      {/* Context menu overlay */}
+      <div className={`ctx-overlay${ctxOpen ? ' open' : ''}`} onClick={closeCtx}>
+        <div
+          className={`ctx-menu${ctxOpen ? ' open' : ''}`}
+          style={{ left: Math.max(8, ctxPos.x), top: ctxPos.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          <button className="ctx-item" onClick={closeCtx}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" stroke="white" strokeWidth="1.6"/></svg>
+            Save event
+          </button>
+          <button className="ctx-item" onClick={closeCtx}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Share
+          </button>
+          <button className="ctx-item destructive" onClick={closeCtx}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#ff4444" strokeWidth="1.6"/><path d="M9 9l6 6M15 9l-6 6" stroke="#ff4444" strokeWidth="1.6" strokeLinecap="round"/></svg>
+            Recommend less
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <div className="mobile-frame">
+      <BrowsePage />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+<div id="root"></div>
+</body>
+</html>

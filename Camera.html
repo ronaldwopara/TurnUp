@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TurnUp Camera</title>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #111; font-family: 'DM Sans', sans-serif; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    #root { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+
+    .mobile-frame {
+      width: 100%; height: 100%; position: relative; overflow: hidden; background: #000;
+    }
+    @media (min-width: 500px) {
+      body { background: #0a0a0a; }
+      .mobile-frame { width: 390px; height: 844px; max-height: 100vh; border-radius: 44px; box-shadow: 0 40px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08); }
+    }
+
+    /* Camera viewfinder */
+    .camera-view {
+      position: absolute; inset: 0; background: #000;
+      display: flex; flex-direction: column;
+    }
+    .camera-lens {
+      flex: 1; background: #0a0a0a; position: relative; overflow: hidden;
+    }
+    /* Subtle camera noise texture */
+    .camera-lens::after {
+      content: ''; position: absolute; inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.01) 2px, rgba(255,255,255,0.01) 4px);
+      pointer-events: none;
+    }
+    .camera-grid {
+      position: absolute; inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-size: 33.33% 33.33%;
+    }
+
+    /* Top bar */
+    .cam-top {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      padding: 24px 20px 16px;
+    }
+    .cam-back {
+      display: flex; align-items: center; gap: 8px;
+      color: #fff; font-size: 15px; font-weight: 600; letter-spacing: -0.2px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.14);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 50px;
+      padding: 8px 16px 8px 12px;
+      cursor: pointer;
+    }
+    .cam-back:hover { background: rgba(255,255,255,0.13); }
+    .cam-profile {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      background: none; border: none; cursor: pointer;
+    }
+    .cam-profile-icon {
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 1.5px solid rgba(255,255,255,0.25);
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .cam-profile-label { color: rgba(255,255,255,0.6); font-size: 11px; font-weight: 600; letter-spacing: 0.1px; }
+
+    /* Bottom controls */
+    .cam-bottom {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+      padding: 16px 0 48px;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
+    }
+    .cam-ctrl {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px;
+      background: none; border: none; cursor: pointer; padding: 8px 0;
+    }
+    .cam-ctrl-inner {
+      width: 52px; height: 52px; border-radius: 16px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.18);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    .cam-ctrl:hover .cam-ctrl-inner { background: rgba(255,255,255,0.14); }
+    .cam-ctrl-label { color: rgba(255,255,255,0.65); font-size: 12px; font-weight: 600; letter-spacing: -0.1px; }
+    .cam-shutter {
+      width: 76px; height: 76px; border-radius: 50%;
+      border: 2.5px solid rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: transform 0.12s ease, background 0.15s;
+    }
+    .cam-shutter:active { transform: scale(0.93); background: rgba(255,255,255,0.15); }
+
+    /* Bottom sheet overlay */
+    .sheet-overlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.6); z-index: 40;
+      opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+    }
+    .sheet-overlay.open { opacity: 1; pointer-events: all; }
+
+    /* Bottom sheet */
+    .bottom-sheet {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 50;
+      background: #1a1a1a; border-radius: 24px 24px 0 0;
+      padding: 12px 24px 48px;
+      transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.32,0.72,0,1);
+    }
+    .bottom-sheet.open { transform: translateY(0); }
+    .sheet-handle {
+      width: 36px; height: 4px; background: rgba(255,255,255,0.2);
+      border-radius: 2px; margin: 0 auto 20px;
+    }
+    .sheet-title { color: #fff; font-size: 17px; font-weight: 700; margin-bottom: 20px; letter-spacing: -0.3px; }
+    .sheet-options { display: flex; flex-direction: column; gap: 4px; }
+    .sheet-option {
+      display: flex; align-items: center; gap: 16px;
+      padding: 16px; border-radius: 14px; background: rgba(255,255,255,0.05);
+      cursor: pointer; border: none; width: 100%; text-align: left;
+    }
+    .sheet-option:hover { background: rgba(255,255,255,0.09); }
+    .sheet-option-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .sheet-option-text { display: flex; flex-direction: column; gap: 2px; }
+    .sheet-option-title { color: #fff; font-size: 15px; font-weight: 600; }
+    .sheet-option-sub { color: rgba(255,255,255,0.45); font-size: 13px; font-weight: 400; }
+
+    /* Link sheet input */
+    .sheet-input {
+      width: 100%; padding: 14px 16px; border-radius: 12px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+      color: #fff; font-family: 'DM Sans', sans-serif; font-size: 15px;
+      outline: none; margin-bottom: 12px;
+    }
+    .sheet-input::placeholder { color: rgba(255,255,255,0.3); }
+    .sheet-btn {
+      width: 100%; padding: 16px; border-radius: 14px;
+      background: #fff; color: #000; font-family: 'DM Sans', sans-serif;
+      font-size: 16px; font-weight: 700; border: none; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<script type="text/babel">
+const { useState } = React;
+
+function ProfileIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8" r="4" stroke="white" strokeWidth="1.6"/>
+      <path d="M4 20c0-4 3.582-7 8-7s8 3 8 7" stroke="white" strokeWidth="1.6" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function UploadsIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+      <path d="M6 24l6-8 5 6 4-5 5 7H6z" fill="rgba(255,255,255,0.85)"/>
+      <circle cx="22" cy="10" r="3" fill="rgba(255,255,255,0.85)"/>
+    </svg>
+  );
+}
+
+function LinksIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+      <path d="M13 19l-1.5 1.5a4 4 0 01-5.657-5.657l3-3A4 4 0 0114.5 12.5" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M19 13l1.5-1.5a4 4 0 015.657 5.657l-3 3A4 4 0 0117.5 19.5" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M12 20l8-8" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function CameraPage({ onBack, onBrowse }) {
+  const [sheet, setSheet] = useState(null); // 'uploads' | 'links' | null
+
+  const openSheet = (type) => setSheet(type);
+  const closeSheet = () => setSheet(null);
+
+  return (
+    <div className="camera-view">
+      {/* Viewfinder */}
+      <div className="camera-lens">
+        <div className="camera-grid"></div>
+      </div>
+
+      {/* Top bar */}
+      <div className="cam-top">
+        <button className="cam-back" onClick={onBrowse}>
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="none">
+            <path d="M7 1L1 7l6 6" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Browse Events
+        </button>
+        <button className="cam-profile">
+          <div className="cam-profile-icon"><ProfileIcon /></div>
+          <span className="cam-profile-label">profile</span>
+        </button>
+      </div>
+
+      {/* Bottom controls */}
+      <div className="cam-bottom">
+        <button className="cam-ctrl" onClick={() => openSheet('uploads')}>
+          <UploadsIcon />
+          <span className="cam-ctrl-label">uploads</span>
+        </button>
+        <button className="cam-shutter" aria-label="Take photo"></button>
+        <button className="cam-ctrl" onClick={() => openSheet('links')}>
+          <LinksIcon />
+          <span className="cam-ctrl-label">links</span>
+        </button>
+      </div>
+
+      {/* Sheet overlay */}
+      <div className={`sheet-overlay${sheet ? ' open' : ''}`} onClick={closeSheet} />
+
+      {/* Uploads bottom sheet */}
+      <div className={`bottom-sheet${sheet === 'uploads' ? ' open' : ''}`}>
+        <div className="sheet-handle"></div>
+        <div className="sheet-title">Add uploads</div>
+        <div className="sheet-options">
+          {[
+            { icon: '🖼', title: 'Photo Library', sub: 'Choose from your camera roll' },
+            { icon: '📁', title: 'Files', sub: 'Browse documents and files' },
+            { icon: '📷', title: 'Take Photo', sub: 'Snap a new image now' },
+          ].map(o => (
+            <button className="sheet-option" key={o.title} onClick={closeSheet}>
+              <div className="sheet-option-icon">
+                <span style={{fontSize:20}}>{o.icon}</span>
+              </div>
+              <div className="sheet-option-text">
+                <span className="sheet-option-title">{o.title}</span>
+                <span className="sheet-option-sub">{o.sub}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Links bottom sheet */}
+      <div className={`bottom-sheet${sheet === 'links' ? ' open' : ''}`}>
+        <div className="sheet-handle"></div>
+        <div className="sheet-title">Insert link</div>
+        <input className="sheet-input" placeholder="Paste a URL here..." />
+        <div className="sheet-options">
+          {[
+            { icon: '🎟', title: 'Ticket link', sub: 'Link to buy or register' },
+            { icon: '📍', title: 'Venue link', sub: 'Google Maps or address' },
+            { icon: '🔗', title: 'Event page', sub: 'Any external event link' },
+          ].map(o => (
+            <button className="sheet-option" key={o.title} onClick={closeSheet}>
+              <div className="sheet-option-icon">
+                <span style={{fontSize:20}}>{o.icon}</span>
+              </div>
+              <div className="sheet-option-text">
+                <span className="sheet-option-title">{o.title}</span>
+                <span className="sheet-option-sub">{o.sub}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+        <button className="sheet-btn" style={{marginTop:16}} onClick={closeSheet}>Insert</button>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <div className="mobile-frame">
+      <CameraPage onBack={() => {}} onBrowse={() => { window.location.href = 'Browse Events.html'; }} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+<div id="root"></div>
+</body>
+</html>
