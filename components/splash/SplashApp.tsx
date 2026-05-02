@@ -354,8 +354,85 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
   const [activeToast, setActiveToast] = useState<ToastItem | null>(null);
 
   useEffect(() => {
+    // When entering from Profile, always restart the flow from step 0.
+    if (fromProfile) {
+      setPermissionStep(0);
+      setPermStepState(0);
+      return;
+    }
     setPermStepState(getPermissionStep());
   }, []);
+
+  const showToast = (msg: string) => {
+    setActiveToast({
+      msg,
+      slideIndex: currentSlide,
+      accentColor,
+      key: Date.now(),
+    });
+  };
+
+  async function requestLocation(): Promise<boolean> {
+    if (typeof window === "undefined") return false;
+    if (!("geolocation" in navigator)) return false;
+    return await new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        () => resolve(true),
+        () => resolve(false),
+        { enableHighAccuracy: true, maximumAge: 15_000, timeout: 12_000 },
+      );
+    });
+  }
+
+  async function requestNotifications(): Promise<boolean> {
+    if (typeof window === "undefined") return false;
+    if (!("Notification" in window)) return false;
+    try {
+      const res = await Notification.requestPermission();
+      return res === "granted";
+    } catch {
+      return false;
+    }
+  }
+
+  async function requestCamera(): Promise<boolean> {
+    if (typeof window === "undefined") return false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      stream.getTracks().forEach((t) => t.stop());
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const handlePermissionPrimary = async () => {
+    // This must be triggered by a user gesture (click/tap) or browsers will block the prompt.
+    if (permStep === PERMISSION_STEPS.length - 1) {
+      // Last step: if camera permission isn't granted yet, prompt first; otherwise continue.
+      const ok = await requestCamera();
+      if (ok) {
+        setPermStep((p) => p + 1);
+        goCamera();
+      } else {
+        showToast("Camera permission blocked");
+      }
+      return;
+    }
+
+    if (permStep === 0) {
+      const ok = await requestLocation();
+      if (ok) setPermStep((p) => p + 1);
+      else showToast("Location permission blocked");
+      return;
+    }
+
+    if (permStep === 1) {
+      const ok = await requestNotifications();
+      if (ok) setPermStep((p) => p + 1);
+      else showToast("Notifications blocked");
+    }
+  };
 
   const setPermStep = (updater: number | ((p: number) => number)) => {
     setPermStepState((prev) => {
@@ -487,11 +564,7 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
             style={{ cursor: "pointer" }}
             onClick={(e) => {
               e.stopPropagation();
-              if (permStep === PERMISSION_STEPS.length - 1) {
-                goCamera();
-              } else {
-                setPermStep((p) => p + 1);
-              }
+              void handlePermissionPrimary();
             }}
             onTouchEnd={(e) => e.stopPropagation()}
           />
@@ -501,12 +574,7 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
           className="browse-btn"
           onClick={(e) => {
             e.stopPropagation();
-            setActiveToast({
-              msg: PERMISSION_TOAST_MSGS[permStep],
-              slideIndex: currentSlide,
-              accentColor,
-              key: Date.now(),
-            });
+            showToast(PERMISSION_TOAST_MSGS[permStep]);
             if (permStep < PERMISSION_STEPS.length - 1) {
               setPermStep((p) => p + 1);
             } else {
