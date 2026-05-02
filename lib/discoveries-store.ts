@@ -25,6 +25,8 @@ export type UserProfile = {
   university: string;
   schoolEmail?: string;
   universityId?: string;
+  locationCity?: string;
+  availableUniversityIds?: string[];
   role?: "student" | "organiser";
   dataPrivacyAccepted?: boolean;
 };

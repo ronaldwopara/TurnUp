@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type TouchEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type TouchEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   TweakColor,
@@ -12,6 +12,8 @@ import {
 
 import { getUserProfile, setUserProfile } from "@/lib/discoveries-store";
 import { getPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
+import { UNIVERSITIES, universitiesForCity } from "@/lib/browse-data";
+import { requestUserCityFromBrowser } from "@/lib/onboarding-location";
 
 const EVENT_WORDS = [
   "tribe",
@@ -275,6 +277,15 @@ const PERMISSION_TOAST_MSGS = [
   "Snap posters, capture moments, and create events in seconds.",
 ];
 
+const LOCATION_PERMISSION_ERRORS: Record<string, string> = {
+  unsupported: "Location isn't supported in this browser. You can pick your university manually.",
+  denied: "Location permission denied. You can still continue and choose manually.",
+  unavailable: "We couldn't get your location. Try again or continue without it.",
+  timeout: "Location request timed out. Try again or continue without it.",
+  unknown: "Couldn't get your location right now. You can continue without it.",
+  geocode_failed: "Location found, but city lookup failed. You can continue without it.",
+};
+
 /** Toast chrome follows the visible onboarding slide (0 = accent from tweaks, 1 = red slide, 2 = green slide). */
 type ToastItem = {
   msg: string;
@@ -352,9 +363,16 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [permStep, setPermStepState] = useState(0);
   const [activeToast, setActiveToast] = useState<ToastItem | null>(null);
+  const [locationCity, setLocationCity] = useState("");
 
   useEffect(() => {
-    setPermStepState(getPermissionStep());
+    // Always start onboarding permissions from step 0 on each reload.
+    setPermissionStep(0);
+    setPermStepState(0);
+    const profile = getUserProfile();
+    if (profile?.locationCity) {
+      setLocationCity(profile.locationCity);
+    }
   }, []);
 
   const setPermStep = (updater: number | ((p: number) => number)) => {
@@ -393,6 +411,57 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
   const goCamera = () => {
     router.push("/camera");
   };
+
+  const persistDetectedCity = (city: string) => {
+    const previous = getUserProfile();
+    const localUniversities = universitiesForCity(city);
+    setUserProfile({
+      ...(previous ?? {}),
+      name: previous?.name ?? "",
+      university: previous?.university ?? "",
+      locationCity: city,
+      availableUniversityIds: localUniversities.map((school) => school.id),
+    });
+    setLocationCity(city);
+  };
+
+  const movePermissionStepForward = () => {
+    if (permStep === PERMISSION_STEPS.length - 1) {
+      goCamera();
+      return;
+    }
+    setPermStep((p) => p + 1);
+  };
+
+  const handlePrimaryPermissionAction = async () => {
+    if (permStep !== 0) {
+      movePermissionStepForward();
+      return;
+    }
+
+    const result = await requestUserCityFromBrowser();
+    if (result.ok) {
+      persistDetectedCity(result.city);
+      setActiveToast({
+        msg: `Location enabled. Showing campuses near ${result.city}.`,
+        slideIndex: currentSlide,
+        accentColor,
+        key: Date.now(),
+      });
+      movePermissionStepForward();
+      return;
+    }
+
+    setActiveToast({
+      msg: LOCATION_PERMISSION_ERRORS[result.reason],
+      slideIndex: currentSlide,
+      accentColor,
+      key: Date.now(),
+    });
+  };
+
+  const currentPermissionLabel =
+    permStep === 0 ? "Use current location" : PERMISSION_STEPS[Math.min(permStep, PERMISSION_STEPS.length - 1)].btn;
 
   return (
     <div className="phone-screen" onClick={handleTap} onTouchEnd={handleTap}>
@@ -482,16 +551,12 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
           <input
             className="uni-input"
             type="text"
-            placeholder={PERMISSION_STEPS[Math.min(permStep, PERMISSION_STEPS.length - 1)].btn}
+            placeholder={currentPermissionLabel}
             readOnly
             style={{ cursor: "pointer" }}
-            onClick={(e) => {
+            onClick={async (e) => {
               e.stopPropagation();
-              if (permStep === PERMISSION_STEPS.length - 1) {
-                goCamera();
-              } else {
-                setPermStep((p) => p + 1);
-              }
+              await handlePrimaryPermissionAction();
             }}
             onTouchEnd={(e) => e.stopPropagation()}
           />
@@ -574,11 +639,28 @@ function GalleryScreen({ onDone }: { onDone: () => void }) {
   const [role, setRole] = useState<GalleryRole>("student");
   const [dataPrivacyAccepted, setDataPrivacyAccepted] = useState(false);
   const [orbitAngle, setOrbitAngle] = useState(0);
+  const [cityHint, setCityHint] = useState("");
+
+  const onboardingProfile = useMemo(() => getUserProfile(), []);
+  const availableUniversities = useMemo(() => {
+    const ids = onboardingProfile?.availableUniversityIds ?? [];
+    const fromIds = ids
+      .map((id) => UNIVERSITIES.find((school) => school.id === id))
+      .filter((school): school is (typeof UNIVERSITIES)[number] => Boolean(school));
+    return fromIds.length > 0 ? fromIds : UNIVERSITIES;
+  }, [onboardingProfile]);
 
   useEffect(() => {
     const t = setTimeout(() => setReady(true), 400);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    if (availableUniversities.length > 0 && !university) {
+      setUniversity(availableUniversities[0].name);
+    }
+    setCityHint(onboardingProfile?.locationCity ?? "");
+  }, [availableUniversities, onboardingProfile, university]);
 
   useEffect(() => {
     let raf: number;
@@ -598,10 +680,15 @@ function GalleryScreen({ onDone }: { onDone: () => void }) {
   const handleContinue = () => {
     if (!dataPrivacyAccepted) return;
     const prev = getUserProfile();
+    const normalizedUniversity = university.trim().toLowerCase();
+    const selectedSchool = availableUniversities.find(
+      (school) => school.name.trim().toLowerCase() === normalizedUniversity,
+    );
     setUserProfile({
       ...(prev ?? {}),
       name: name.trim() || prev?.name || "",
       university: university.trim() || prev?.university || "",
+      universityId: selectedSchool?.id ?? prev?.universityId,
       schoolEmail: schoolEmail.trim() || prev?.schoolEmail,
       role,
       dataPrivacyAccepted: true,
@@ -654,7 +741,9 @@ function GalleryScreen({ onDone }: { onDone: () => void }) {
             value={university}
             onChange={(e) => setUniversity(e.target.value)}
             autoComplete="organization"
+            aria-label="Enter your university"
           />
+          {cityHint ? <p className="gallery-sub" style={{ marginTop: 2 }}>Campuses near {cityHint}</p> : null}
           <input
             className="gallery-input"
             type="text"

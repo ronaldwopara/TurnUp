@@ -43,6 +43,11 @@ export type AppliedDateFilter =
  * Full `name` kept for search until onboarding/API wiring.
  */
 export const UNIVERSITIES: University[] = [
+  { id: "ualberta", abbr: "UAlberta", name: "University of Alberta", city: "Edmonton" },
+  { id: "macewan", abbr: "MacEwan", name: "MacEwan University", city: "Edmonton" },
+  { id: "nait", abbr: "NAIT", name: "Northern Alberta Institute of Technology", city: "Edmonton" },
+  { id: "uofc", abbr: "UCalgary", name: "University of Calgary", city: "Calgary" },
+  { id: "mru", abbr: "MRU", name: "Mount Royal University", city: "Calgary" },
   { id: "nyu", abbr: "NYU", name: "New York University", city: "New York" },
   { id: "columbia", abbr: "Columbia", name: "Columbia University", city: "New York" },
   { id: "cornell", abbr: "Cornell", name: "Cornell University", city: "Ithaca" },
@@ -60,6 +65,19 @@ export const UNIVERSITIES: University[] = [
  * TODO(onboarding): replace with school chosen during onboarding (prop/context/API).
  */
 export const ONBOARDING_HOME_UNIVERSITY_ID = "nyu";
+
+export function normalizeCityName(city: string): string {
+  return city.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+export function universitiesForCity(city: string): University[] {
+  const normalized = normalizeCityName(city);
+  if (!normalized) return [];
+  return UNIVERSITIES.filter((school) => {
+    const schoolCity = normalizeCityName(school.city);
+    return schoolCity === normalized || schoolCity.includes(normalized) || normalized.includes(schoolCity);
+  });
+}
 
 export const AMENITY_OPTIONS: { id: AmenityId; label: string }[] = [
   { id: "food", label: "Food" },

@@ -94,6 +94,7 @@ export default function ProfilePage() {
 
   const [uniSheetOpen, setUniSheetOpen] = useState(false);
   const [selectedUniversityId, setSelectedUniversityId] = useState<string>(ONBOARDING_HOME_UNIVERSITY_ID);
+  const [availableUniversities, setAvailableUniversities] = useState(UNIVERSITIES);
 
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 4, 1));
@@ -106,8 +107,8 @@ export default function ProfilePage() {
   const hasCredentials = hasDeckCredentials(profile);
 
   const selectedUniversity = useMemo(() => {
-    return UNIVERSITIES.find((u) => u.id === selectedUniversityId) ?? UNIVERSITIES[0];
-  }, [selectedUniversityId]);
+    return availableUniversities.find((u) => u.id === selectedUniversityId) ?? availableUniversities[0];
+  }, [availableUniversities, selectedUniversityId]);
 
   const likedEventIds = useMemo(() => {
     void likesVersion;
@@ -197,6 +198,21 @@ export default function ProfilePage() {
     if (typeof window === "undefined") return;
     setGoogleConnected(localStorage.getItem("turnup_google_connected") === "1");
   }, []);
+
+  useEffect(() => {
+    const preferred = (profile?.availableUniversityIds ?? [])
+      .map((id) => UNIVERSITIES.find((u) => u.id === id))
+      .filter((u): u is (typeof UNIVERSITIES)[number] => Boolean(u));
+    const universities = preferred.length > 0 ? preferred : UNIVERSITIES;
+    setAvailableUniversities(universities);
+
+    const nextSelected =
+      universities.find((u) => u.id === profile?.universityId)?.id ??
+      universities.find((u) => u.name === profile?.university)?.id ??
+      universities[0]?.id ??
+      ONBOARDING_HOME_UNIVERSITY_ID;
+    setSelectedUniversityId(nextSelected);
+  }, [profile]);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -498,7 +514,7 @@ export default function ProfilePage() {
       >
         <div className="browse-sheet-handle" />
         <div className="browse-uni-list browse-uni-list--top">
-          {UNIVERSITIES.map((u) => {
+          {availableUniversities.map((u) => {
             const isSelected = u.id === selectedUniversityId;
             return (
               <button

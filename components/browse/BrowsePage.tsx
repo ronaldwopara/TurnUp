@@ -25,7 +25,7 @@ import {
   type EventItem,
   type AppliedDateFilter,
 } from "@/lib/browse-data";
-import { isEventLiked, toggleLikedEvent } from "@/lib/discoveries-store";
+import { getUserProfile, isEventLiked, toggleLikedEvent } from "@/lib/discoveries-store";
 
 function DotsIcon() {
   return (
@@ -134,6 +134,7 @@ export default function BrowsePage() {
 
   const [uniSheetOpen, setUniSheetOpen] = useState(false);
   const [selectedUniversityId, setSelectedUniversityId] = useState<string>(ONBOARDING_HOME_UNIVERSITY_ID);
+  const [availableUniversities, setAvailableUniversities] = useState(UNIVERSITIES);
 
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 4, 1));
@@ -155,8 +156,26 @@ export default function BrowsePage() {
   const pendingPriceTierLabel = PRICE_TIER_LABELS[tierFromSliderPercent(pendingPriceSlider)];
 
   const selectedUniversity = useMemo(() => {
-    return UNIVERSITIES.find((u) => u.id === selectedUniversityId) ?? UNIVERSITIES[0];
-  }, [selectedUniversityId]);
+    return availableUniversities.find((u) => u.id === selectedUniversityId) ?? availableUniversities[0];
+  }, [availableUniversities, selectedUniversityId]);
+
+  useEffect(() => {
+    const profile = getUserProfile();
+    if (!profile) return;
+
+    const preferred = (profile.availableUniversityIds ?? [])
+      .map((id) => UNIVERSITIES.find((u) => u.id === id))
+      .filter((u): u is (typeof UNIVERSITIES)[number] => Boolean(u));
+    const universities = preferred.length > 0 ? preferred : UNIVERSITIES;
+
+    setAvailableUniversities(universities);
+    const nextSelected =
+      universities.find((u) => u.id === profile.universityId)?.id ??
+      universities.find((u) => u.name === profile.university)?.id ??
+      universities[0]?.id ??
+      ONBOARDING_HOME_UNIVERSITY_ID;
+    setSelectedUniversityId(nextSelected);
+  }, []);
 
   const filteredEvents = useMemo(() => {
     let list = ALL_EVENTS;
@@ -582,7 +601,7 @@ export default function BrowsePage() {
       >
         <div className="browse-sheet-handle" />
         <div className="browse-uni-list browse-uni-list--top">
-          {UNIVERSITIES.map((u) => {
+          {availableUniversities.map((u) => {
             const isSelected = u.id === selectedUniversityId;
             return (
               <button
