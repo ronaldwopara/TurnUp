@@ -160,7 +160,14 @@ export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={item.capture.dataUrl} alt="" className="discoveries-stack-img" draggable={false} />
                 ) : item.kind === "stash" ? (
-                  <div className="discoveries-stack-gradient">
+                  <div
+                    className="discoveries-stack-gradient"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, rgba(62, 101, 255, 0.95) 0%, rgba(144, 86, 255, 0.92) 52%, rgba(255, 99, 150, 0.88) 100%)",
+                      color: "white",
+                    }}
+                  >
                     <div
                       style={{
                         position: "absolute",
