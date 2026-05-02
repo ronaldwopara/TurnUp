@@ -339,11 +339,15 @@ export default function CameraPage() {
       };
       const title = payload.data?.event?.title ?? "Event parsed";
       const isNoFlyerFound = title.trim().toLowerCase() === "no flyer found";
-      setStatusMessage(isNoFlyerFound ? "No flyer found" : "Add to calendar");
-      setParsedEvent({
-        title,
-        googleCalendarUrl: isNoFlyerFound ? undefined : payload.data?.calendarPayload?.googleCalendarUrl,
-      });
+      setStatusMessage(isNoFlyerFound ? "No flyer found" : "");
+      setParsedEvent(
+        isNoFlyerFound
+          ? null
+          : {
+              title,
+              googleCalendarUrl: payload.data?.calendarPayload?.googleCalendarUrl,
+            },
+      );
       if (options?.clearSheetUpload) {
         setSheetUploadImage(null);
         closeSheet();
@@ -445,11 +449,15 @@ export default function CameraPage() {
       };
       const title = payload.data?.event?.title ?? "Event parsed";
       const isNoFlyerFound = title.trim().toLowerCase() === "no flyer found";
-      setStatusMessage(isNoFlyerFound ? "No flyer found" : "Add to calendar");
-      setParsedEvent({
-        title,
-        googleCalendarUrl: isNoFlyerFound ? undefined : payload.data?.calendarPayload?.googleCalendarUrl,
-      });
+      setStatusMessage(isNoFlyerFound ? "No flyer found" : "");
+      setParsedEvent(
+        isNoFlyerFound
+          ? null
+          : {
+              title,
+              googleCalendarUrl: payload.data?.calendarPayload?.googleCalendarUrl,
+            },
+      );
       setLinkValue("");
       closeSheet();
     } catch {
@@ -460,12 +468,14 @@ export default function CameraPage() {
     }
   }
 
+  const cameraStatusText = isBusy ? "Processing..." : statusMessage;
+
   return (
     <div className="camera-view">
       <div className="camera-lens">
         <video ref={videoRef} className={`camera-feed${cameraReady ? " ready" : ""}`} playsInline muted autoPlay />
         <div className="camera-grid" />
-        <div className="camera-status">{isBusy ? "Processing..." : statusMessage}</div>
+        {cameraStatusText.trim() ? <div className="camera-status">{cameraStatusText}</div> : null}
       </div>
       <input
         ref={galleryInputRef}
