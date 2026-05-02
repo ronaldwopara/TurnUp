@@ -33,6 +33,15 @@ async function fileFromSheetUploadValue(value: File | string | null): Promise<Fi
   return null;
 }
 
+async function fileToDataUrl(file: File): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 function ProfileIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -404,6 +413,8 @@ export default function CameraPage() {
     }
 
     const file = new File([blob], `turnup-${Date.now()}.jpg`, { type: "image/jpeg" });
+    const captureDataUrl = canvas.toDataURL("image/jpeg", 0.88);
+    addCapture(captureDataUrl);
     await submitImage(file);
   }
 
@@ -412,6 +423,14 @@ export default function CameraPage() {
     event.target.value = "";
     if (!file) {
       return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      if (dataUrl) {
+        addCapture(dataUrl);
+      }
+    } catch {
+      // ignore capture-save failures and continue ingest
     }
     await submitImage(file);
     closeSheet();

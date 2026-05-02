@@ -32,6 +32,7 @@ type ProfileStashItem = {
   subtitle?: string | null;
   detailLabel?: string | null;
   sourceUrl?: string | null;
+  thumbnailUrl?: string | null;
   createdAt?: string;
 };
 
@@ -128,6 +129,7 @@ export default function ProfilePage() {
           subtitle: stash.subtitle,
           detailLabel: stash.detailLabel,
           sourceUrl: stash.sourceUrl,
+          thumbnailUrl: stash.thumbnailUrl,
         },
       });
     }

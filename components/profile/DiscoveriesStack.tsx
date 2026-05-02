@@ -17,6 +17,7 @@ export type DiscoveryStackItem =
         subtitle?: string | null;
         detailLabel?: string | null;
         sourceUrl?: string | null;
+        thumbnailUrl?: string | null;
       };
     };
 
@@ -163,17 +164,30 @@ export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
                   <div
                     className="discoveries-stack-gradient"
                     style={{
-                      background:
-                        "linear-gradient(135deg, rgba(62, 101, 255, 0.95) 0%, rgba(144, 86, 255, 0.92) 52%, rgba(255, 99, 150, 0.88) 100%)",
+                      background: item.stash.thumbnailUrl
+                        ? "linear-gradient(0deg, rgba(8, 9, 20, 0.52), rgba(8, 9, 20, 0.52))"
+                        : "linear-gradient(135deg, rgba(62, 101, 255, 0.95) 0%, rgba(144, 86, 255, 0.92) 52%, rgba(255, 99, 150, 0.88) 100%)",
                       color: "white",
+                      position: "relative",
                     }}
                   >
+                    {item.stash.thumbnailUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.stash.thumbnailUrl}
+                        alt=""
+                        className="discoveries-stack-img"
+                        draggable={false}
+                        style={{ position: "absolute", inset: 0, zIndex: 0 }}
+                      />
+                    ) : null}
                     <div
                       style={{
                         position: "absolute",
                         top: 16,
                         left: 16,
                         right: 16,
+                        zIndex: 1,
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
@@ -209,6 +223,7 @@ export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
                           left: 16,
                           right: 16,
                           bottom: 14,
+                          zIndex: 1,
                           fontSize: 12,
                           opacity: 0.82,
                           whiteSpace: "nowrap",

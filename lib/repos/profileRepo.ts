@@ -1,6 +1,52 @@
 import type { LearnedFact } from "@prisma/client";
 import { db } from "@/lib/db";
 
+function inferImageUrlFromSource(sourceUrl?: string | null): string | undefined {
+  if (!sourceUrl) return undefined;
+  try {
+    const pathname = new URL(sourceUrl).pathname.toLowerCase();
+    if (/\.(png|jpe?g|webp|gif)(\?|$)/i.test(pathname)) {
+      return sourceUrl;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function faviconForUrl(sourceUrl?: string | null): string | undefined {
+  if (!sourceUrl) return undefined;
+  try {
+    const url = new URL(sourceUrl);
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(url.hostname)}&sz=256`;
+  } catch {
+    return undefined;
+  }
+}
+
+function stashThumbnailFromScan(input: {
+  sourceUrl?: string | null;
+  itemType: string;
+  providerRawJson?: unknown;
+}): string | undefined {
+  const directImage = inferImageUrlFromSource(input.sourceUrl);
+  if (directImage) return directImage;
+
+  if (input.providerRawJson && typeof input.providerRawJson === "object") {
+    const mediaUrl =
+      "mediaUrl" in input.providerRawJson ? (input.providerRawJson as { mediaUrl?: unknown }).mediaUrl : undefined;
+    if (typeof mediaUrl === "string" && mediaUrl.trim().length > 0) {
+      return mediaUrl;
+    }
+  }
+
+  if (input.itemType === "link" || input.itemType === "video") {
+    return faviconForUrl(input.sourceUrl);
+  }
+
+  return undefined;
+}
+
 export async function ensureUser(userId: string) {
   return db.user.upsert({
     where: { id: userId },
@@ -54,6 +100,13 @@ export async function getProfileBundle(userId: string) {
       where: { userId },
       orderBy: { createdAt: "desc" },
       take: 50,
+      include: {
+        scanItem: {
+          select: {
+            providerRawJson: true,
+          },
+        },
+      },
     }),
     db.learnedFact.findMany({
       where: { userId },
@@ -77,6 +130,11 @@ export async function getProfileBundle(userId: string) {
       detailLabel: item.detailLabel,
       assetRef: item.assetRef,
       sourceUrl: item.sourceUrl,
+      thumbnailUrl: stashThumbnailFromScan({
+        sourceUrl: item.sourceUrl,
+        itemType: item.itemType,
+        providerRawJson: item.scanItem?.providerRawJson,
+      }),
       createdAt: item.createdAt,
     })),
     learnedFacts: learnedFacts.map((fact) => ({
