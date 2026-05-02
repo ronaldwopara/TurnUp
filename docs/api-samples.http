@@ -1,0 +1,57 @@
+### Ingest image with multipart/form-data
+POST http://localhost:3000/api/ingest/image
+Content-Type: multipart/form-data; boundary=TurnUpBoundary
+
+--TurnUpBoundary
+Content-Disposition: form-data; name="userId"
+
+demo-user
+--TurnUpBoundary
+Content-Disposition: form-data; name="file"; filename="flyer.jpg"
+Content-Type: image/jpeg
+
+< ./fixtures/flyer.jpg
+--TurnUpBoundary--
+
+### Ingest image with base64 JSON
+POST http://localhost:3000/api/ingest/image
+Content-Type: application/json
+
+{
+  "userId": "demo-user",
+  "mimeType": "image/png",
+  "base64Image": "iVBORw0KGgoAAAANSUhEUgAA..."
+}
+
+### Ingest social link
+POST http://localhost:3000/api/ingest/link
+Content-Type: application/json
+
+{
+  "userId": "demo-user",
+  "url": "https://www.instagram.com/p/EXAMPLE/"
+}
+
+### Get profile data
+GET http://localhost:3000/api/profile?userId=demo-user
+
+### Add stash item manually
+POST http://localhost:3000/api/profile/stash
+Content-Type: application/json
+
+{
+  "userId": "demo-user",
+  "itemType": "link",
+  "title": "uab.ca/scholarships",
+  "subtitle": "Bookmarked Apr 12",
+  "detailLabel": "Saved link",
+  "sourceUrl": "https://www.ualberta.ca/"
+}
+
+### Regenerate insights
+POST http://localhost:3000/api/profile/insights/regenerate
+Content-Type: application/json
+
+{
+  "userId": "demo-user"
+}

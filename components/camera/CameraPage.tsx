@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { ImageUploadField } from "./ImageUploadField";
@@ -156,15 +156,282 @@ export default function CameraPage() {
   const router = useRouter();
   const [sheet, setSheet] = useState<"uploads" | "links" | null>(null);
   const [sheetUploadImage, setSheetUploadImage] = useState<File | string | null>(null);
+  const [linkValue, setLinkValue] = useState("");
+  const [statusMessage, setStatusMessage] = useState("Requesting camera access...");
+  const [parsedEvent, setParsedEvent] = useState<{ title: string; googleCalendarUrl?: string } | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const userId = "demo-user";
 
   const openSheet = (type: "uploads" | "links") => setSheet(type);
   const closeSheet = () => setSheet(null);
 
+  async function getUserMediaCompat(constraints: MediaStreamConstraints) {
+    if (navigator.mediaDevices?.getUserMedia) {
+      return navigator.mediaDevices.getUserMedia(constraints);
+    }
+
+    const legacyNavigator = navigator as Navigator & {
+      getUserMedia?: (
+        constraints: MediaStreamConstraints,
+        successCallback: (stream: MediaStream) => void,
+        errorCallback: (error: DOMException) => void
+      ) => void;
+      webkitGetUserMedia?: (
+        constraints: MediaStreamConstraints,
+        successCallback: (stream: MediaStream) => void,
+        errorCallback: (error: DOMException) => void
+      ) => void;
+      mozGetUserMedia?: (
+        constraints: MediaStreamConstraints,
+        successCallback: (stream: MediaStream) => void,
+        errorCallback: (error: DOMException) => void
+      ) => void;
+    };
+
+    const legacyGetUserMedia =
+      legacyNavigator.getUserMedia ?? legacyNavigator.webkitGetUserMedia ?? legacyNavigator.mozGetUserMedia;
+
+    if (!legacyGetUserMedia) {
+      throw new Error("getUserMedia is unavailable in this browser.");
+    }
+
+    return await new Promise<MediaStream>((resolve, reject) => {
+      legacyGetUserMedia.call(legacyNavigator, constraints, resolve, reject);
+    });
+  }
+
+  async function requestCameraStream() {
+    const attempts: MediaStreamConstraints[] = [
+      {
+        video: {
+          facingMode: { ideal: "environment" },
+        },
+        audio: false,
+      },
+      {
+        video: true,
+        audio: false,
+      },
+    ];
+
+    let lastError: unknown;
+    for (const constraints of attempts) {
+      try {
+        return await getUserMediaCompat(constraints);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError ?? new Error("Unable to access camera.");
+  }
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function initCamera() {
+      if (!window.isSecureContext) {
+        if (isMounted) {
+          setStatusMessage("Camera needs HTTPS in Safari. Open this app over HTTPS (or localhost).");
+          setCameraReady(false);
+        }
+        return;
+      }
+
+      try {
+        const stream = await requestCameraStream();
+
+        if (!isMounted) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+        if (videoRef.current) {
+          const video = videoRef.current;
+          video.srcObject = stream;
+          video.autoplay = true;
+          video.muted = true;
+          video.setAttribute("playsinline", "true");
+
+          try {
+            await video.play();
+          } catch {
+            // Safari can reject the first play() call before metadata is ready.
+          }
+        }
+        setCameraReady(true);
+        setStatusMessage("Point camera at an event flyer.");
+      } catch (error) {
+        const name = error instanceof DOMException ? error.name : "";
+        setCameraReady(false);
+        if (name === "NotAllowedError" || name === "SecurityError") {
+          setStatusMessage("Camera permission denied. Use Uploads to continue.");
+          return;
+        }
+        if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+          setStatusMessage("No camera found on this device. Use Uploads to continue.");
+          return;
+        }
+        setStatusMessage("Camera unavailable right now. Use Uploads to continue.");
+      }
+    }
+
+    initCamera();
+    return () => {
+      isMounted = false;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
+  async function submitImage(file: File) {
+    setIsBusy(true);
+    setStatusMessage("Analyzing flyer...");
+    setParsedEvent(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("userId", userId);
+
+      const response = await fetch("/api/ingest/image", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        throw new Error("Image ingest failed");
+      }
+
+      const payload = (await response.json()) as {
+        data?: {
+          event?: { title?: string };
+          calendarPayload?: { googleCalendarUrl?: string };
+        };
+      };
+      const title = payload.data?.event?.title ?? "Event parsed";
+      setStatusMessage(`Parsed: ${title}`);
+      setParsedEvent({
+        title,
+        googleCalendarUrl: payload.data?.calendarPayload?.googleCalendarUrl,
+      });
+    } catch {
+      setStatusMessage("Could not parse image. Try another photo.");
+      setParsedEvent(null);
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function onTakePhoto() {
+    const video = videoRef.current;
+    if (!video || !cameraReady || isBusy) {
+      return;
+    }
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) {
+      setStatusMessage("Camera is still initializing.");
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setStatusMessage("Unable to capture photo on this device.");
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((value) => resolve(value), "image/jpeg", 0.92)
+    );
+    if (!blob) {
+      setStatusMessage("Photo capture failed. Please retry.");
+      return;
+    }
+
+    const file = new File([blob], `turnup-${Date.now()}.jpg`, { type: "image/jpeg" });
+    await submitImage(file);
+  }
+
+  async function onPickFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    await submitImage(file);
+    closeSheet();
+  }
+
+  async function onSubmitLink() {
+    if (!linkValue.trim() || isBusy) {
+      return;
+    }
+
+    setIsBusy(true);
+    setStatusMessage("Analyzing link...");
+    setParsedEvent(null);
+    try {
+      const response = await fetch("/api/ingest/link", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          url: linkValue.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Link ingest failed");
+      }
+
+      const payload = (await response.json()) as {
+        data?: {
+          event?: { title?: string };
+          calendarPayload?: { googleCalendarUrl?: string };
+        };
+      };
+      const title = payload.data?.event?.title ?? "Event parsed";
+      setStatusMessage(`Parsed from link: ${title}`);
+      setParsedEvent({
+        title,
+        googleCalendarUrl: payload.data?.calendarPayload?.googleCalendarUrl,
+      });
+      setLinkValue("");
+      closeSheet();
+    } catch {
+      setStatusMessage("Could not parse that link. Please try another.");
+      setParsedEvent(null);
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   return (
     <div className="camera-view">
       <div className="camera-lens">
+        <video ref={videoRef} className={`camera-feed${cameraReady ? " ready" : ""}`} playsInline muted autoPlay />
         <div className="camera-grid" />
+        <div className="camera-status">{isBusy ? "Processing..." : statusMessage}</div>
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={onPickFile}
+      />
 
       <div className="cam-top">
         <button type="button" className="cam-back" onClick={() => router.push("/browse")}>
@@ -184,11 +451,29 @@ export default function CameraPage() {
         <button type="button" className="cam-ctrl" onClick={() => openSheet("uploads")}>
           <UploadsIcon />
         </button>
-        <button type="button" className="cam-shutter" aria-label="Take photo" />
+        <button type="button" className="cam-shutter" aria-label="Take photo" onClick={onTakePhoto} />
         <button type="button" className="cam-ctrl" onClick={() => openSheet("links")}>
           <LinksIcon />
         </button>
       </div>
+      {parsedEvent ? (
+        <div className="camera-result-card" role="status" aria-live="polite">
+          <div className="camera-result-title">Ready to add this event?</div>
+          <div className="camera-result-name">{parsedEvent.title}</div>
+          <button
+            type="button"
+            className="camera-result-action"
+            onClick={() => {
+              if (parsedEvent.googleCalendarUrl) {
+                window.open(parsedEvent.googleCalendarUrl, "_blank", "noopener,noreferrer");
+              }
+            }}
+            disabled={!parsedEvent.googleCalendarUrl}
+          >
+            Add to Google Calendar
+          </button>
+        </div>
+      ) : null}
 
       <div className={`sheet-overlay${sheet ? " open" : ""}`} onClick={closeSheet} />
 
@@ -206,15 +491,31 @@ export default function CameraPage() {
             }}
           />
         </div>
-        <div className="sheet-options sheet-options-links-row">
-          {(["Photo Library", "Files"] as const).map((title) => (
+        <div className="sheet-options">
+          {[
+            { icon: "🖼", title: "Photo Library", sub: "Choose from your camera roll" },
+            { icon: "📁", title: "Files", sub: "Browse documents and files" },
+            { icon: "📷", title: "Take Photo", sub: "Snap a new image now" },
+          ].map((o) => (
             <button
               type="button"
-              className="sheet-option sheet-option-pill sheet-option-pill--upload"
-              key={title}
-              onClick={closeSheet}
+              className="sheet-option"
+              key={o.title}
+              onClick={() => {
+                if (o.title === "Take Photo") {
+                  onTakePhoto();
+                } else {
+                  fileInputRef.current?.click();
+                }
+              }}
             >
-              <span className="sheet-option-title">{title}</span>
+              <div className="sheet-option-icon">
+                <span style={{ fontSize: 20 }}>{o.icon}</span>
+              </div>
+              <div className="sheet-option-text">
+                <span className="sheet-option-title">{o.title}</span>
+                <span className="sheet-option-sub">{o.sub}</span>
+              </div>
             </button>
           ))}
         </div>
@@ -223,31 +524,45 @@ export default function CameraPage() {
       <div className={`bottom-sheet${sheet === "links" ? " open" : ""}`}>
         <div className="sheet-handle" />
         <div className="sheet-title">Insert link</div>
-        <input className="sheet-input" placeholder="Paste a URL here..." />
+        <input
+          className="sheet-input"
+          placeholder="Paste a URL here..."
+          value={linkValue}
+          onChange={(event) => setLinkValue(event.target.value)}
+        />
         <div className="sheet-options sheet-options-links-row">
-          <button
-            type="button"
-            className="sheet-option sheet-option-pill sheet-option-pill--socials"
-            onClick={closeSheet}
-          >
+          <button type="button" className="sheet-option sheet-option-pill sheet-option-pill--socials" onClick={closeSheet}>
             <SocialsCardFan />
             <div className="sheet-option-text">
               <span className="sheet-option-title">Socials</span>
             </div>
           </button>
-          <button
-            type="button"
-            className="sheet-option sheet-option-pill sheet-option-pill--event"
-            onClick={closeSheet}
-          >
+          <button type="button" className="sheet-option sheet-option-pill sheet-option-pill--event" onClick={closeSheet}>
             <EventPageCardFan />
             <div className="sheet-option-text">
               <span className="sheet-option-title">Event page</span>
             </div>
           </button>
         </div>
-        <button type="button" className="sheet-btn" style={{ marginTop: 16 }} onClick={closeSheet}>
-          Insert
+        <div className="sheet-options">
+          {[
+            { icon: "🎟", title: "Ticket link", sub: "Link to buy or register" },
+            { icon: "📍", title: "Venue link", sub: "Google Maps or address" },
+            { icon: "🔗", title: "Event page", sub: "Any external event link" },
+          ].map((o) => (
+            <button type="button" className="sheet-option" key={o.title} onClick={closeSheet}>
+              <div className="sheet-option-icon">
+                <span style={{ fontSize: 20 }}>{o.icon}</span>
+              </div>
+              <div className="sheet-option-text">
+                <span className="sheet-option-title">{o.title}</span>
+                <span className="sheet-option-sub">{o.sub}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+        <button type="button" className="sheet-btn" style={{ marginTop: 16 }} onClick={onSubmitLink}>
+          {isBusy ? "Working..." : "Insert"}
         </button>
       </div>
     </div>
