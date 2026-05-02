@@ -461,7 +461,18 @@ export default function ProfilePage() {
             </button>
           </div>
         ) : (
-          <DiscoveriesStack items={stackItems} />
+          <DiscoveriesStack
+            items={stackItems}
+            onDelete={(item) => {
+              if (item.kind === "capture") {
+                deleteCapture(item.capture.id);
+                setLikesVersion((v) => v + 1);
+              } else if (item.kind === "event") {
+                toggleLikedEvent(item.event.id);
+                setLikesVersion((v) => v + 1);
+              }
+            }}
+          />
         )}
 
         <div className="profile-insights-section">
