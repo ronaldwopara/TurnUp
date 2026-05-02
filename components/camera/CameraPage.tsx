@@ -7,7 +7,7 @@ import { ImageUploadField } from "./ImageUploadField";
 import { AddToCalendarButton } from "@/components/ui/AddToCalendarButton";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLink } from "@fortawesome/free-solid-svg-icons";
-import { addCapture, hasDeckCredentials } from "@/lib/discoveries-store";
+import { addCapture, hasDeckCredentials, getUserId, getUserProfile } from "@/lib/discoveries-store";
 
 const byPrefixAndName = {
   fas: {
@@ -187,14 +187,16 @@ export default function CameraPage() {
   const [linkValue, setLinkValue] = useState("");
   const [statusMessage, setStatusMessage] = useState("Requesting camera access...");
   const [parsedEvent, setParsedEvent] = useState<{ title: string; googleCalendarUrl?: string } | null>(null);
+  const [lastCaptureDataUrl, setLastCaptureDataUrl] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canPersistDeck = hasDeckCredentials();
-  const userId = "demo-user";
+  const userId = getUserId();
 
   const openSheet = (type: "uploads" | "links") => setSheet(type);
   const closeSheet = () => setSheet(null);
@@ -417,6 +419,7 @@ export default function CameraPage() {
     const file = new File([blob], `turnup-${Date.now()}.jpg`, { type: "image/jpeg" });
     const captureDataUrl = canvas.toDataURL("image/jpeg", 0.88);
     addCapture(captureDataUrl);
+    setLastCaptureDataUrl(captureDataUrl);
     await submitImage(file);
   }
 
@@ -491,6 +494,40 @@ export default function CameraPage() {
   }
 
   const cameraStatusText = isBusy ? "Processing..." : statusMessage;
+  const profile = getUserProfile();
+  const isOrganiser = profile?.role === "organiser";
+
+  async function postToBrowse() {
+    if (!parsedEvent || isPosting) return;
+
+    setIsPosting(true);
+    setStatusMessage("Posting to Browse...");
+
+    try {
+      const response = await fetch("/api/flyers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          title: parsedEvent.title,
+          imageUrl: lastCaptureDataUrl ?? undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to post flyer");
+      }
+
+      setStatusMessage("Posted successfully!");
+      setParsedEvent(null);
+      setLastCaptureDataUrl(null);
+      setTimeout(() => router.push("/browse"), 800);
+    } catch {
+      setStatusMessage("Failed to post. Please try again.");
+    } finally {
+      setIsPosting(false);
+    }
+  }
 
   return (
     <div className="camera-view">
@@ -539,17 +576,30 @@ export default function CameraPage() {
       </div>
       {parsedEvent ? (
         <div className="camera-result-card" role="status" aria-live="polite">
-          <div className="camera-result-title">Ready to add this event?</div>
+          <div className="camera-result-title">
+            {isOrganiser ? "Ready to post this event?" : "Ready to add this event?"}
+          </div>
           <div className="camera-result-name">{parsedEvent.title}</div>
-          <AddToCalendarButton
-            className="camera-result-action"
-            onClick={() => {
-              if (parsedEvent.googleCalendarUrl) {
-                window.open(parsedEvent.googleCalendarUrl, "_blank", "noopener,noreferrer");
-              }
-            }}
-            disabled={!parsedEvent.googleCalendarUrl}
-          />
+          {isOrganiser ? (
+            <button
+              type="button"
+              className="camera-result-action camera-post-btn"
+              onClick={postToBrowse}
+              disabled={isPosting}
+            >
+              {isPosting ? "Posting..." : "Post to Browse"}
+            </button>
+          ) : (
+            <AddToCalendarButton
+              className="camera-result-action"
+              onClick={() => {
+                if (parsedEvent.googleCalendarUrl) {
+                  window.open(parsedEvent.googleCalendarUrl, "_blank", "noopener,noreferrer");
+                }
+              }}
+              disabled={!parsedEvent.googleCalendarUrl}
+            />
+          )}
         </div>
       ) : null}
 

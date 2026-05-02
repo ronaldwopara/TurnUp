@@ -24,6 +24,9 @@ import {
   clearDeckStorage,
   hasDeckCredentials,
   clearUserProfile,
+  clearAiSchools,
+  getUserId,
+  getAiSchools,
 } from "@/lib/discoveries-store";
 import { clearPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
 
@@ -82,7 +85,9 @@ export default function ProfilePage() {
   const [googleConnected, setGoogleConnected] = useState(false);
 
   const [uniSheetOpen, setUniSheetOpen] = useState(false);
-  const [selectedUniversityId, setSelectedUniversityId] = useState<string>(ONBOARDING_HOME_UNIVERSITY_ID);
+  const [selectedUniversityId, setSelectedUniversityId] = useState<string>(() => {
+    return profile?.universityId || ONBOARDING_HOME_UNIVERSITY_ID;
+  });
 
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 4, 1));
@@ -94,9 +99,29 @@ export default function ProfilePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const hasCredentials = hasDeckCredentials(profile);
 
+  const universitiesForPicker = useMemo(() => {
+    const aiSchools = getAiSchools();
+    if (aiSchools.length > 0) {
+      return aiSchools.map((s) => ({ id: s.id, abbr: s.abbr, name: s.name, city: s.city }));
+    }
+    return UNIVERSITIES;
+  }, []);
+
   const selectedUniversity = useMemo(() => {
+    const aiSchools = getAiSchools();
+    if (aiSchools.length > 0) {
+      const found = aiSchools.find((u) => u.id === selectedUniversityId);
+      if (found) return { id: found.id, abbr: found.abbr, name: found.name, city: found.city };
+    }
     return UNIVERSITIES.find((u) => u.id === selectedUniversityId) ?? UNIVERSITIES[0];
   }, [selectedUniversityId]);
+
+  const selectedUniversityAbbr = useMemo(() => {
+    if (profile?.universityId === selectedUniversityId && profile.universityAbbr) {
+      return profile.universityAbbr;
+    }
+    return selectedUniversity.abbr;
+  }, [selectedUniversityId, selectedUniversity.abbr, profile]);
 
   const likedEventIds = useMemo(() => {
     void likesVersion;
@@ -203,7 +228,7 @@ export default function ProfilePage() {
 
     const loadStashes = async () => {
       try {
-        const response = await fetch("/api/profile?userId=demo-user", { cache: "no-store" });
+        const response = await fetch(`/api/profile?userId=${encodeURIComponent(getUserId())}`, { cache: "no-store" });
         if (!response.ok) return;
         const payload = (await response.json()) as {
           data?: {
@@ -224,7 +249,7 @@ export default function ProfilePage() {
     void loadStashes();
     const t = setInterval(() => {
       void loadStashes();
-    }, 2000);
+    }, 60000);
     return () => {
       isMounted = false;
       clearInterval(t);
@@ -332,13 +357,25 @@ export default function ProfilePage() {
     window.location.href = buildExportDataMailto();
   };
 
-  const deleteProfileData = () => {
+  const deleteProfileData = async () => {
     if (typeof window === "undefined") return;
-    const ok = window.confirm("Delete your TurnUp profile data from this device?");
-    if (!ok) return;
+    const confirmed = window.confirm("Delete your TurnUp profile data from this device and server?");
+    if (!confirmed) return;
+
+    const currentUserId = getUserId();
+    if (currentUserId && currentUserId !== "demo-user") {
+      try {
+        await fetch(`/api/profile?userId=${encodeURIComponent(currentUserId)}`, {
+          method: "DELETE",
+        });
+      } catch {
+        // continue with local cleanup even if server delete fails
+      }
+    }
 
     clearDeckStorage();
     clearUserProfile();
+    clearAiSchools();
     clearPermissionStep();
     try {
       localStorage.removeItem("turnup_google_connected");
@@ -380,7 +417,7 @@ export default function ProfilePage() {
               aria-haspopup="dialog"
               aria-expanded={uniSheetOpen}
             >
-              {selectedUniversity.abbr}
+              {selectedUniversityAbbr}
             </button>
 
             {appliedDateFilter ? (
@@ -449,6 +486,16 @@ export default function ProfilePage() {
             Permissions Request
           </button>
 
+          {profile?.role === "organiser" && (
+            <button
+              type="button"
+              className="profile-permission-btn profile-analytics-btn"
+              onClick={() => router.push("/analytics")}
+            >
+              Analytics
+            </button>
+          )}
+
           <div className="profile-settings-list">
             <button type="button" className="profile-settings-row" onClick={() => alert("Notification settings")}>
               <span>Notifications</span>
@@ -506,7 +553,7 @@ export default function ProfilePage() {
       >
         <div className="browse-sheet-handle" />
         <div className="browse-uni-list browse-uni-list--top">
-          {UNIVERSITIES.map((u) => {
+          {universitiesForPicker.map((u) => {
             const isSelected = u.id === selectedUniversityId;
             return (
               <button

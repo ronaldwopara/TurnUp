@@ -10,9 +10,8 @@ import {
   useTweaks,
 } from "@/components/tweaks-panel";
 
-import { getUserProfile, setUserProfile } from "@/lib/discoveries-store";
+import { getUserProfile, setUserProfile, setAiSchools, type AiSchool } from "@/lib/discoveries-store";
 import { getPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
-import { UNIVERSITIES, inferNearestUniversityIdFromCoords } from "@/lib/browse-data";
 
 const EVENT_WORDS = [
   "tribe",
@@ -424,33 +423,43 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
     if (permStep === 0) {
       const res = await requestLocation();
       if (res.ok) {
-        // Use location to auto-pick a nearby university (and persist it).
-        const inferredId =
-          res.lat != null && res.lng != null ? inferNearestUniversityIdFromCoords(res.lat, res.lng) : null;
-        if (inferredId) {
-          const uni = UNIVERSITIES.find((u) => u.id === inferredId);
-          const prev = getUserProfile();
-          let abbr = uni?.abbr ?? "";
+        if (res.lat != null && res.lng != null) {
           try {
-            const res = await fetch("/api/universities/ai", {
+            const locRes = await fetch("/api/universities/locate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ universityNameForAbbr: uni?.name ?? "" }),
+              body: JSON.stringify({ lat: res.lat, lng: res.lng }),
             });
-            if (res.ok) {
-              const payload = (await res.json()) as { data?: { abbr?: string | null } };
-              const next = payload.data?.abbr;
-              if (typeof next === "string" && next.trim()) abbr = next.trim();
+            if (locRes.ok) {
+              const payload = (await locRes.json()) as {
+                data?: {
+                  city?: string;
+                  region?: string;
+                  schools?: Array<{ name: string; abbreviation: string }>;
+                };
+              };
+              const d = payload.data;
+              const schools: AiSchool[] = (d?.schools ?? []).map((s, i) => ({
+                id: `ai_${i}_${s.abbreviation.toLowerCase()}`,
+                name: s.name,
+                abbr: s.abbreviation,
+                city: d?.city ?? "",
+              }));
+              if (schools.length > 0) {
+                setAiSchools(schools);
+                const top = schools[0];
+                const prev = getUserProfile();
+                setUserProfile({
+                  ...(prev ?? { name: "", university: "" }),
+                  universityId: top.id,
+                  university: top.name,
+                  universityAbbr: top.abbr,
+                });
+              }
             }
           } catch {
-            // ignore
+            // AI locate failed — continue without schools
           }
-          setUserProfile({
-            ...(prev ?? { name: "", university: "" }),
-            universityId: inferredId,
-            university: uni?.name ?? prev?.university ?? "",
-            universityAbbr: abbr || uni?.abbr,
-          });
         }
         setPermStep((p) => p + 1);
       } else {

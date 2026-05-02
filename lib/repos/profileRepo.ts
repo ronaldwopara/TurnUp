@@ -59,6 +59,15 @@ export async function ensureUser(userId: string) {
   });
 }
 
+export async function deleteUser(userId: string): Promise<boolean> {
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    return false;
+  }
+  await db.user.delete({ where: { id: userId } });
+  return true;
+}
+
 export async function replaceLearnedFacts(userId: string, facts: Array<{
   text: string;
   factType: string;

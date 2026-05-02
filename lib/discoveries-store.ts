@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   LIKED_EVENTS: "turnup_liked_events",
   CAPTURES: "turnup_captures",
   PROFILE: "turnup_profile",
+  AI_SCHOOLS: "turnup_ai_schools",
 } as const;
 
 const MAX_CAPTURES = 50;
@@ -186,6 +187,51 @@ export function clearUserProfile(): void {
     localStorage.removeItem(STORAGE_KEYS.PROFILE);
   } catch {
     // ignore localStorage write failures
+  }
+}
+
+export function getUserId(): string {
+  const profile = getUserProfile();
+  const email = profile?.schoolEmail?.trim().toLowerCase();
+  if (email && email.includes("@")) return email;
+  return "demo-user";
+}
+
+// ─── AI-generated schools ─────────────────────────────────────────────────────
+
+export type AiSchool = {
+  id: string;
+  name: string;
+  abbr: string;
+  city: string;
+};
+
+export function getAiSchools(): AiSchool[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.AI_SCHOOLS);
+    if (!raw) return [];
+    return JSON.parse(raw) as AiSchool[];
+  } catch {
+    return [];
+  }
+}
+
+export function setAiSchools(schools: AiSchool[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.AI_SCHOOLS, JSON.stringify(schools));
+  } catch (e) {
+    console.error("Failed to save AI schools:", e);
+  }
+}
+
+export function clearAiSchools(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.AI_SCHOOLS);
+  } catch {
+    // ignore
   }
 }
 
