@@ -51,7 +51,13 @@ function stashGlyph(type: "document" | "link" | "image" | "video") {
   }
 }
 
-export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
+export function DiscoveriesStack({
+  items,
+  onDelete,
+}: {
+  items: DiscoveryStackItem[];
+  onDelete?: (item: DiscoveryStackItem) => void;
+}) {
   const itemsFingerprint = useMemo(() => items.map((it) => it.key).join("\0"), [items]);
   const totalCount = items.length;
 
@@ -137,6 +143,16 @@ export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
           const tx = isTop ? x + dragOffset.x : x;
           const ty = isTop ? y + dragOffset.y : y;
 
+          const handleDelete = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!onDelete) return;
+            const confirmed = window.confirm("Remove this flyer from your discoveries?");
+            if (confirmed) {
+              onDelete(item);
+            }
+          };
+
           return (
             <div
               key={item.key}
@@ -146,6 +162,16 @@ export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
                 transform: `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) rotate(${rotate}deg)`,
               }}
             >
+              {onDelete && (
+                <button
+                  type="button"
+                  className="discoveries-stack-delete"
+                  onClick={handleDelete}
+                  aria-label="Remove flyer"
+                >
+                  ✕
+                </button>
+              )}
               <div className="discoveries-stack-card-inner">
                 {item.kind === "capture" ? (
                   // eslint-disable-next-line @next/next/no-img-element

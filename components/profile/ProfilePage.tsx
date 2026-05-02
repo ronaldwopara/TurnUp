@@ -27,6 +27,8 @@ import {
   clearAiSchools,
   getUserId,
   getAiSchools,
+  deleteCapture,
+  toggleLikedEvent,
 } from "@/lib/discoveries-store";
 import { clearPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
 
