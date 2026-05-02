@@ -12,6 +12,7 @@ import {
 
 import { getUserProfile, setUserProfile } from "@/lib/discoveries-store";
 import { getPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
+import { UNIVERSITIES, inferNearestUniversityIdFromCoords } from "@/lib/browse-data";
 
 const EVENT_WORDS = [
   "tribe",
@@ -372,13 +373,13 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
     });
   };
 
-  async function requestLocation(): Promise<boolean> {
-    if (typeof window === "undefined") return false;
-    if (!("geolocation" in navigator)) return false;
+  async function requestLocation(): Promise<{ ok: boolean; lat?: number; lng?: number }> {
+    if (typeof window === "undefined") return { ok: false };
+    if (!("geolocation" in navigator)) return { ok: false };
     return await new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
-        () => resolve(true),
-        () => resolve(false),
+        (pos) => resolve({ ok: true, lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve({ ok: false }),
         { enableHighAccuracy: true, maximumAge: 15_000, timeout: 12_000 },
       );
     });
@@ -421,9 +422,24 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
     }
 
     if (permStep === 0) {
-      const ok = await requestLocation();
-      if (ok) setPermStep((p) => p + 1);
-      else showToast("Location permission blocked");
+      const res = await requestLocation();
+      if (res.ok) {
+        // Use location to auto-pick a nearby university (and persist it).
+        const inferredId =
+          res.lat != null && res.lng != null ? inferNearestUniversityIdFromCoords(res.lat, res.lng) : null;
+        if (inferredId) {
+          const uni = UNIVERSITIES.find((u) => u.id === inferredId);
+          const prev = getUserProfile();
+          setUserProfile({
+            ...(prev ?? { name: "", university: "" }),
+            universityId: inferredId,
+            university: uni?.name ?? prev?.university ?? "",
+          });
+        }
+        setPermStep((p) => p + 1);
+      } else {
+        showToast("Location permission blocked");
+      }
       return;
     }
 

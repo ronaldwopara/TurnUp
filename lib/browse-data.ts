@@ -61,6 +61,52 @@ export const UNIVERSITIES: University[] = [
  */
 export const ONBOARDING_HOME_UNIVERSITY_ID = "nyu";
 
+// ─── Location helpers (lightweight) ───────────────────────────────────────────
+
+type MetroCenter = { city: University["city"]; lat: number; lng: number };
+
+const METRO_CENTERS: MetroCenter[] = [
+  { city: "New York", lat: 40.7128, lng: -74.006 },
+  { city: "Miami", lat: 25.7617, lng: -80.1918 },
+  { city: "Los Angeles", lat: 34.0522, lng: -118.2437 },
+  { city: "Washington DC", lat: 38.9072, lng: -77.0369 },
+  { city: "Boston", lat: 42.3601, lng: -71.0589 },
+  { city: "Ithaca", lat: 42.443, lng: -76.5019 },
+] as const;
+
+function toRad(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const x =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+export function inferNearestCityFromCoords(lat: number, lng: number): University["city"] | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  let best: { city: University["city"]; dist: number } | null = null;
+  for (const c of METRO_CENTERS) {
+    const d = haversineKm({ lat, lng }, c);
+    if (!best || d < best.dist) best = { city: c.city, dist: d };
+  }
+  return best?.city ?? null;
+}
+
+export function inferNearestUniversityIdFromCoords(lat: number, lng: number): string | null {
+  const city = inferNearestCityFromCoords(lat, lng);
+  if (!city) return null;
+  const first = UNIVERSITIES.find((u) => u.city === city);
+  return first?.id ?? null;
+}
+
 export const AMENITY_OPTIONS: { id: AmenityId; label: string }[] = [
   { id: "food", label: "Food" },
   { id: "giveaways", label: "Giveaways" },

@@ -24,8 +24,9 @@ import {
   type AmenityId,
   type EventItem,
   type AppliedDateFilter,
+  type University,
 } from "@/lib/browse-data";
-import { isEventLiked, toggleLikedEvent } from "@/lib/discoveries-store";
+import { getUserProfile, isEventLiked, setUserProfile, toggleLikedEvent } from "@/lib/discoveries-store";
 
 function DotsIcon() {
   return (
@@ -133,7 +134,10 @@ export default function BrowsePage() {
   const [ctxPos, setCtxPos] = useState({ x: 0, y: 0 });
 
   const [uniSheetOpen, setUniSheetOpen] = useState(false);
-  const [selectedUniversityId, setSelectedUniversityId] = useState<string>(ONBOARDING_HOME_UNIVERSITY_ID);
+  const [selectedUniversityId, setSelectedUniversityId] = useState<string>(() => {
+    const profile = getUserProfile();
+    return profile?.universityId || ONBOARDING_HOME_UNIVERSITY_ID;
+  });
 
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 4, 1));
@@ -157,6 +161,13 @@ export default function BrowsePage() {
   const selectedUniversity = useMemo(() => {
     return UNIVERSITIES.find((u) => u.id === selectedUniversityId) ?? UNIVERSITIES[0];
   }, [selectedUniversityId]);
+
+  const universitiesForPicker: University[] = useMemo(() => {
+    const city = selectedUniversity.city;
+    const nearby = UNIVERSITIES.filter((u) => u.city === city);
+    const rest = UNIVERSITIES.filter((u) => u.city !== city);
+    return [...nearby, ...rest];
+  }, [selectedUniversity.city]);
 
   const filteredEvents = useMemo(() => {
     let list = ALL_EVENTS;
@@ -582,7 +593,7 @@ export default function BrowsePage() {
       >
         <div className="browse-sheet-handle" />
         <div className="browse-uni-list browse-uni-list--top">
-          {UNIVERSITIES.map((u) => {
+          {universitiesForPicker.map((u) => {
             const isSelected = u.id === selectedUniversityId;
             return (
               <button
@@ -592,6 +603,12 @@ export default function BrowsePage() {
                 aria-current={isSelected ? "true" : undefined}
                 onClick={() => {
                   setSelectedUniversityId(u.id);
+                  const prev = getUserProfile();
+                  setUserProfile({
+                    ...(prev ?? { name: "", university: "" }),
+                    universityId: u.id,
+                    university: u.name,
+                  });
                   setUniSheetOpen(false);
                 }}
               >
