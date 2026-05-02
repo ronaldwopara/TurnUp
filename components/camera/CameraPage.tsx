@@ -22,20 +22,32 @@ function ProfileIcon() {
 
 function UploadsIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden>
-      <path d="M6 24l6-8 5 6 4-5 5 7H6z" fill="rgba(255,255,255,0.85)" />
-      <circle cx="22" cy="10" r="3" fill="rgba(255,255,255,0.85)" />
+    <svg className="cam-upload-icon" viewBox="0 0 30 26" fill="none" aria-hidden>
+      <g transform="translate(2.1 4.5) rotate(-13.5 5.8 7.8)">
+        <rect
+          x="1.2"
+          y="0.8"
+          width="10.8"
+          height="15.6"
+          rx="2.1"
+          fill="none"
+          stroke="rgba(255,255,255,0.92)"
+          strokeWidth="1.9"
+        />
+      </g>
+      <g transform="translate(10.7 2.5) rotate(-1.5 7.2 9.2)">
+        <rect x="0.8" y="0.8" width="13.2" height="19" rx="2.5" fill="#fff" />
+        <rect x="2.55" y="2.85" width="9.75" height="12.2" rx="1.5" fill="#8d6848" />
+        <path d="M2.55 12.9L5.35 9.8L7.65 11.95L9.75 10.35L12.3 13.2V15.05H2.55V12.9Z" fill="#efdac0" />
+        <circle cx="7.15" cy="7.4" r="1.15" fill="#f4e4cc" />
+      </g>
     </svg>
   );
 }
 
 function LinksIcon() {
   return (
-    <FontAwesomeIcon
-      icon={byPrefixAndName.fas["link"]}
-      aria-hidden
-      style={{ width: 28, height: 28, color: "rgba(255,255,255,0.85)" }}
-    />
+    <FontAwesomeIcon icon={byPrefixAndName.fas["link"]} className="cam-link-icon" aria-hidden />
   );
 }
 
@@ -63,19 +75,16 @@ export default function CameraPage() {
           <div className="cam-profile-icon">
             <ProfileIcon />
           </div>
-          <span className="cam-profile-label">profile</span>
         </button>
       </div>
 
       <div className="cam-bottom">
         <button type="button" className="cam-ctrl" onClick={() => openSheet("uploads")}>
           <UploadsIcon />
-          <span className="cam-ctrl-label">uploads</span>
         </button>
         <button type="button" className="cam-shutter" aria-label="Take photo" />
         <button type="button" className="cam-ctrl" onClick={() => openSheet("links")}>
           <LinksIcon />
-          <span className="cam-ctrl-label">links</span>
         </button>
       </div>
 

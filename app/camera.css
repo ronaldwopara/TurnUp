@@ -37,7 +37,7 @@
     }
     .cam-back:hover { background: rgba(255,255,255,0.13); }
     .cam-profile {
-      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      display: flex; align-items: center; justify-content: center;
       background: none; border: none; cursor: pointer;
     }
     .cam-profile-icon {
@@ -48,18 +48,23 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
     }
-    .cam-profile-label { color: rgba(255,255,255,0.6); font-size: 11px; font-weight: 600; letter-spacing: 0.1px; }
-
     /* Bottom controls */
     .cam-bottom {
       position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
-      padding: 16px 0 48px;
+      padding: 10px 0 42px;
       display: flex; align-items: center; justify-content: center;
       background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
     }
     .cam-ctrl {
-      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px;
-      background: none; border: none; cursor: pointer; padding: 8px 0;
+      flex: 1;
+      height: 66px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
     }
     .cam-ctrl-inner {
       width: 52px; height: 52px; border-radius: 16px;
@@ -71,18 +76,31 @@
       transition: background 0.2s;
     }
     .cam-ctrl:hover .cam-ctrl-inner { background: rgba(255,255,255,0.14); }
-    .cam-ctrl-label { color: rgba(255,255,255,0.65); font-size: 12px; font-weight: 600; letter-spacing: -0.1px; }
-    .cam-shutter {
-      width: 76px; height: 76px; border-radius: 50%;
-      border: 2.5px solid rgba(255,255,255,0.9);
-      background: rgba(255,255,255,0.06);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; transition: transform 0.12s ease, background 0.15s;
+    .cam-upload-icon {
+      width: 33px;
+      height: 29px;
+      transform: translateY(1px);
     }
-    .cam-shutter:active { transform: scale(0.93); background: rgba(255,255,255,0.15); }
+    .cam-link-icon {
+      width: 21px;
+      height: 21px;
+      color: rgba(255,255,255,0.88);
+      transform: translateY(0.5px) scale(1.03);
+    }
+    .cam-shutter {
+      width: 71px;
+      height: 71px;
+      border-radius: 50%;
+      border: 7px solid #fff;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: transform 0.12s ease;
+    }
+    .cam-shutter:active { transform: scale(0.96); }
 
     /* Bottom sheet overlay */
     .sheet-overlay {
