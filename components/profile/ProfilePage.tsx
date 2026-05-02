@@ -190,6 +190,7 @@ export default function ProfilePage() {
       });
     }
     for (const stash of stashes) {
+      if (stash.type === "image") continue;
       out.push({
         kind: "stash",
         key: `stash-${stash.id}`,

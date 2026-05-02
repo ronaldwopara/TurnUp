@@ -13,6 +13,7 @@ const createFlyerSchema = z.object({
   imageUrl: z.string().optional(),
   color: z.string().optional(),
   accent: z.string().optional(),
+  displayName: z.string().optional(),
 });
 
 export async function GET() {

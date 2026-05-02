@@ -504,6 +504,8 @@ export default function CameraPage() {
     setStatusMessage("Posting to Browse...");
 
     try {
+      const uniName = profile?.university || profile?.universityAbbr || "";
+      const displayName = uniName ? `${uniName} Student` : undefined;
       const response = await fetch("/api/flyers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -511,6 +513,7 @@ export default function CameraPage() {
           userId,
           title: parsedEvent.title,
           imageUrl: lastCaptureDataUrl ?? undefined,
+          displayName,
         }),
       });
 

@@ -10,10 +10,11 @@ export type CreateFlyerInput = {
   imageUrl?: string;
   color?: string;
   accent?: string;
+  displayName?: string;
 };
 
 export async function createFlyer(input: CreateFlyerInput) {
-  await ensureUser(input.userId);
+  await ensureUser(input.userId, input.displayName);
 
   return db.postedFlyer.create({
     data: {
