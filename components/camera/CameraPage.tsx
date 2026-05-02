@@ -477,91 +477,61 @@ export default function CameraPage() {
 
       <div className={`sheet-overlay${sheet ? " open" : ""}`} onClick={closeSheet} />
 
-      <div className={`bottom-sheet${sheet === "uploads" ? " open" : ""}`}>
+      <div className={`bottom-sheet bottom-sheet--uploads${sheet === "uploads" ? " open" : ""}`}>
         <div className="sheet-handle" />
-        <div className="sheet-title">Add uploads</div>
+        <h2 className="sheet-title">Add uploads</h2>
         <div className="sheet-upload-section">
           <p className="sheet-upload-heading">From your device</p>
           <ImageUploadField
             value={sheetUploadImage}
             onChange={setSheetUploadImage}
-            aspectRatio={2.1}
+            aspectRatio={1.55}
             onCaptureSave={(dataUrl) => {
               addCapture(dataUrl);
             }}
           />
         </div>
-        <div className="sheet-options">
-          {[
-            { icon: "🖼", title: "Photo Library", sub: "Choose from your camera roll" },
-            { icon: "📁", title: "Files", sub: "Browse documents and files" },
-            { icon: "📷", title: "Take Photo", sub: "Snap a new image now" },
-          ].map((o) => (
-            <button
-              type="button"
-              className="sheet-option"
-              key={o.title}
-              onClick={() => {
-                if (o.title === "Take Photo") {
-                  onTakePhoto();
-                } else {
-                  fileInputRef.current?.click();
-                }
-              }}
-            >
-              <div className="sheet-option-icon">
-                <span style={{ fontSize: 20 }}>{o.icon}</span>
-              </div>
-              <div className="sheet-option-text">
-                <span className="sheet-option-title">{o.title}</span>
-                <span className="sheet-option-sub">{o.sub}</span>
-              </div>
-            </button>
-          ))}
+        <div className="sheet-upload-footer">
+          <button type="button" className="sheet-source-pill sheet-source-pill--primary" onClick={() => fileInputRef.current?.click()}>
+            Photo Library
+          </button>
+          <button type="button" className="sheet-source-pill" onClick={() => fileInputRef.current?.click()}>
+            Files
+          </button>
         </div>
       </div>
 
-      <div className={`bottom-sheet${sheet === "links" ? " open" : ""}`}>
+      <div className={`bottom-sheet bottom-sheet--links${sheet === "links" ? " open" : ""}`}>
         <div className="sheet-handle" />
-        <div className="sheet-title">Insert link</div>
+        <h2 className="sheet-title">Insert link</h2>
         <input
+          id="cam-link-input"
           className="sheet-input"
           placeholder="Paste a URL here..."
           value={linkValue}
           onChange={(event) => setLinkValue(event.target.value)}
+          autoComplete="off"
+          autoCorrect="off"
         />
-        <div className="sheet-options sheet-options-links-row">
-          <button type="button" className="sheet-option sheet-option-pill sheet-option-pill--socials" onClick={closeSheet}>
+        <div className="sheet-link-chips" role="presentation">
+          <button
+            type="button"
+            className="sheet-link-chip"
+            onClick={() => document.getElementById("cam-link-input")?.focus()}
+          >
             <SocialsCardFan />
-            <div className="sheet-option-text">
-              <span className="sheet-option-title">Socials</span>
-            </div>
+            <span className="sheet-link-chip-label">Socials</span>
           </button>
-          <button type="button" className="sheet-option sheet-option-pill sheet-option-pill--event" onClick={closeSheet}>
+          <button
+            type="button"
+            className="sheet-link-chip"
+            onClick={() => document.getElementById("cam-link-input")?.focus()}
+          >
             <EventPageCardFan />
-            <div className="sheet-option-text">
-              <span className="sheet-option-title">Event page</span>
-            </div>
+            <span className="sheet-link-chip-label">Event page</span>
           </button>
         </div>
-        <div className="sheet-options">
-          {[
-            { icon: "🎟", title: "Ticket link", sub: "Link to buy or register" },
-            { icon: "📍", title: "Venue link", sub: "Google Maps or address" },
-            { icon: "🔗", title: "Event page", sub: "Any external event link" },
-          ].map((o) => (
-            <button type="button" className="sheet-option" key={o.title} onClick={closeSheet}>
-              <div className="sheet-option-icon">
-                <span style={{ fontSize: 20 }}>{o.icon}</span>
-              </div>
-              <div className="sheet-option-text">
-                <span className="sheet-option-title">{o.title}</span>
-                <span className="sheet-option-sub">{o.sub}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-        <button type="button" className="sheet-btn" style={{ marginTop: 16 }} onClick={onSubmitLink}>
+        <button type="button" className="sheet-btn" onClick={onSubmitLink} disabled={isBusy}>
           {isBusy ? "Working..." : "Insert"}
         </button>
       </div>
