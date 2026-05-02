@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 
 import { Calendar } from "@/components/ui/calendar";
+import { AddToCalendarButton } from "@/components/ui/AddToCalendarButton";
 import {
   UNIVERSITIES,
   ONBOARDING_HOME_UNIVERSITY_ID,
@@ -25,9 +26,6 @@ import {
   type AppliedDateFilter,
 } from "@/lib/browse-data";
 import { isEventLiked, toggleLikedEvent } from "@/lib/discoveries-store";
-
-const GOOGLE_CALENDAR_FAVICON =
-  "https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_1_2x.png";
 
 function DotsIcon() {
   return (
@@ -110,22 +108,10 @@ function EventCard({
         >
           <HeartIcon filled={liked} />
         </button>
-        <button
-          type="button"
+        <AddToCalendarButton
           className="card-cal-floating card-glass-btn"
-          aria-label="Add to Calendar"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <img
-            src={GOOGLE_CALENDAR_FAVICON}
-            alt=""
-            className="card-cal-favicon"
-            width={18}
-            height={18}
-            decoding="async"
-          />
-          Add to Calendar
-        </button>
+          stopPropagation
+        />
       </div>
       <div className="card-body">
         <h3 className="card-title">{event.title}</h3>

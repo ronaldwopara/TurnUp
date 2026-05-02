@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { ImageUploadField } from "./ImageUploadField";
+import { AddToCalendarButton } from "@/components/ui/AddToCalendarButton";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLink } from "@fortawesome/free-solid-svg-icons";
 import { addCapture } from "@/lib/discoveries-store";
@@ -69,24 +70,6 @@ function UploadsIcon() {
 function LinksIcon() {
   return (
     <FontAwesomeIcon icon={byPrefixAndName.fas["link"]} className="cam-link-icon" aria-hidden />
-  );
-}
-
-function GoogleCalendarIcon() {
-  return (
-    <svg className="gcal-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden focusable="false">
-      <rect x="3.25" y="3.75" width="17.5" height="17.5" rx="4" fill="#ffffff" />
-      <rect x="3.25" y="3.75" width="17.5" height="17.5" rx="4" fill="none" stroke="rgba(255,255,255,0.22)" />
-      <path d="M3.25 9.2H20.75" stroke="rgba(0,0,0,0.12)" strokeWidth="1" />
-      {/* Google-ish accent blocks */}
-      <rect x="3.25" y="3.75" width="4.1" height="4.1" rx="3" fill="#34A853" />
-      <rect x="7.35" y="3.75" width="4.1" height="4.1" fill="#4285F4" />
-      <rect x="11.45" y="3.75" width="4.1" height="4.1" fill="#FBBC05" />
-      <rect x="15.55" y="3.75" width="5.2" height="4.1" rx="3" fill="#EA4335" />
-      <text x="9.3" y="18" fontSize="10" fontWeight="800" fill="#3c4043" fontFamily="system-ui, -apple-system, Segoe UI, Roboto, Arial">
-        1
-      </text>
-    </svg>
   );
 }
 
@@ -526,8 +509,7 @@ export default function CameraPage() {
         <div className="camera-result-card" role="status" aria-live="polite">
           <div className="camera-result-title">Ready to add this event?</div>
           <div className="camera-result-name">{parsedEvent.title}</div>
-          <button
-            type="button"
+          <AddToCalendarButton
             className="camera-result-action"
             onClick={() => {
               if (parsedEvent.googleCalendarUrl) {
@@ -535,10 +517,7 @@ export default function CameraPage() {
               }
             }}
             disabled={!parsedEvent.googleCalendarUrl}
-          >
-            <GoogleCalendarIcon />
-            <span className="camera-result-action__label">Add to Calendar</span>
-          </button>
+          />
         </div>
       ) : null}
 
