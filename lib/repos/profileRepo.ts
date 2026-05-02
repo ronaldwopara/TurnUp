@@ -193,7 +193,7 @@ export async function addLearnedFactIfNovel(input: {
 export async function getProfileBundle(userId: string) {
   await ensureUser(userId);
 
-  const [user, stashItems, learnedFacts] = await Promise.all([
+  const [user, stashItems, learnedFacts, postedFlyers] = await Promise.all([
     db.user.findUniqueOrThrow({
       where: { id: userId },
     }),
@@ -214,7 +214,44 @@ export async function getProfileBundle(userId: string) {
       orderBy: { generatedAt: "desc" },
       take: 20,
     }),
+    db.postedFlyer.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
   ]);
+
+  const stashesFromItems = stashItems.map((item) => ({
+    id: item.id,
+    type: item.itemType as "document" | "link" | "image" | "video",
+    title: item.title,
+    subtitle: item.subtitle,
+    detailLabel: item.detailLabel,
+    assetRef: item.assetRef,
+    sourceUrl: item.sourceUrl,
+    thumbnailUrl: stashThumbnailFromScan({
+      sourceUrl: item.sourceUrl,
+      itemType: item.itemType,
+      providerRawJson: item.scanItem?.providerRawJson,
+    }),
+    createdAt: item.createdAt,
+  }));
+
+  const stashesFromFlyers = postedFlyers.map((flyer) => ({
+    id: flyer.id,
+    type: "image" as const,
+    title: flyer.title,
+    subtitle: flyer.description,
+    detailLabel: flyer.eventDate,
+    assetRef: null,
+    sourceUrl: null,
+    thumbnailUrl: flyer.imageUrl,
+    createdAt: flyer.createdAt,
+  }));
+
+  const allStashes = [...stashesFromItems, ...stashesFromFlyers].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 
   return {
     profile: {
@@ -223,21 +260,7 @@ export async function getProfileBundle(userId: string) {
       schoolLabel: user.schoolLabel ?? "",
       avatarUrl: user.avatarUrl,
     },
-    stashes: stashItems.map((item) => ({
-      id: item.id,
-      type: item.itemType,
-      title: item.title,
-      subtitle: item.subtitle,
-      detailLabel: item.detailLabel,
-      assetRef: item.assetRef,
-      sourceUrl: item.sourceUrl,
-      thumbnailUrl: stashThumbnailFromScan({
-        sourceUrl: item.sourceUrl,
-        itemType: item.itemType,
-        providerRawJson: item.scanItem?.providerRawJson,
-      }),
-      createdAt: item.createdAt,
-    })),
+    stashes: allStashes,
     learnedFacts: learnedFacts.map((fact) => ({
       id: fact.id,
       text: fact.text,

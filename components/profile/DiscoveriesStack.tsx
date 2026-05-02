@@ -13,6 +13,7 @@ export type DiscoveryStackItem =
       key: string;
       title: string;
       savedAt: number;
+      stashId: string;
       stash: {
         type: "document" | "link" | "image" | "video";
         subtitle?: string | null;

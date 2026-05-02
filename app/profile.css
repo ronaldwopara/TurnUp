@@ -505,7 +505,7 @@
 .discoveries-stack-delete {
   position: absolute;
   top: 8px;
-  left: 8px;
+  right: 8px;
   z-index: 100;
   width: 28px;
   height: 28px;

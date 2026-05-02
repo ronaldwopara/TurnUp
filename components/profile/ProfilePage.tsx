@@ -79,17 +79,28 @@ function deriveAiInsights(likedEvents: EventItem[], captureCount: number): strin
 }
 export default function ProfilePage() {
   const router = useRouter();
-  const [profile] = useState(() => getUserProfile());
+  const [profile, setProfile] = useState<ReturnType<typeof getUserProfile>>(null);
   const [sessionNow] = useState(() => Date.now());
-  const [discoveryCount, setDiscoveryCount] = useState(() => getDiscoveryCount());
+  const [discoveryCount, setDiscoveryCount] = useState(0);
   const [stashes, setStashes] = useState<ProfileStashItem[]>([]);
   const [learnedFacts, setLearnedFacts] = useState<ProfileLearnedFact[]>([]);
   const [googleConnected, setGoogleConnected] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setProfile(getUserProfile());
+    setDiscoveryCount(getDiscoveryCount());
+    setMounted(true);
+  }, []);
 
   const [uniSheetOpen, setUniSheetOpen] = useState(false);
-  const [selectedUniversityId, setSelectedUniversityId] = useState<string>(() => {
-    return profile?.universityId || ONBOARDING_HOME_UNIVERSITY_ID;
-  });
+  const [selectedUniversityId, setSelectedUniversityId] = useState<string>(ONBOARDING_HOME_UNIVERSITY_ID);
+
+  useEffect(() => {
+    if (profile?.universityId) {
+      setSelectedUniversityId(profile.universityId);
+    }
+  }, [profile?.universityId]);
 
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 4, 1));
@@ -184,6 +195,7 @@ export default function ProfilePage() {
         key: `stash-${stash.id}`,
         title: stash.title || "Saved item",
         savedAt: stash.createdAt ? new Date(stash.createdAt).getTime() : 0,
+        stashId: stash.id,
         stash: {
           type: stash.type,
           subtitle: stash.subtitle,
@@ -387,6 +399,18 @@ export default function ProfilePage() {
     router.push("/");
   };
 
+  if (!mounted) {
+    return (
+      <div className="browse-page profile-page">
+        <div className="profile-header-row">
+          <div className="profile-header-text">
+            <h1 className="profile-name">Loading...</h1>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="browse-page profile-page">
       <div className="profile-header-row">
@@ -463,13 +487,23 @@ export default function ProfilePage() {
         ) : (
           <DiscoveriesStack
             items={stackItems}
-            onDelete={(item) => {
+            onDelete={async (item) => {
               if (item.kind === "capture") {
                 deleteCapture(item.capture.id);
                 setLikesVersion((v) => v + 1);
               } else if (item.kind === "event") {
                 toggleLikedEvent(item.event.id);
                 setLikesVersion((v) => v + 1);
+              } else if (item.kind === "stash") {
+                try {
+                  const userId = getUserId();
+                  await fetch(`/api/flyers/${item.stashId}?userId=${encodeURIComponent(userId)}`, {
+                    method: "DELETE",
+                  });
+                  setStashes((prev) => prev.filter((s) => s.id !== item.stashId));
+                } catch {
+                  // ignore
+                }
               }
             }}
           />
