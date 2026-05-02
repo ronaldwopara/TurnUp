@@ -88,7 +88,7 @@ const INGEST_OBSERVATION_SCHEMA = {
     summary: {
       type: "string",
       description:
-        "A concise observation about the user's interests from this ingest item. Max 30 characters.",
+        "A concise observation about the user's interests from this ingest item. Max 40 characters.",
     },
   },
 } as const;
@@ -132,8 +132,28 @@ function isWeakEventTitle(title?: string): boolean {
   return false;
 }
 
+const MAX_OBSERVATION_CHARS = 40;
+
+function trimToWordBoundary(input: string, maxChars: number): string {
+  const clean = input
+    .replace(/\s+/g, " ")
+    .replace(/^[\s"'`]+|[\s"'`]+$/g, "")
+    .trim();
+
+  if (clean.length <= maxChars) {
+    return clean;
+  }
+
+  const withinLimit = clean.slice(0, maxChars + 1);
+  const lastSpace = withinLimit.lastIndexOf(" ");
+  if (lastSpace <= 0) {
+    return clean.slice(0, maxChars).trim();
+  }
+  return withinLimit.slice(0, lastSpace).trim();
+}
+
 function normalizeObservationSummary(input: string): string {
-  return input.replace(/\s+/g, " ").replace(/^[\s"'`]+|[\s"'`]+$/g, "").trim().slice(0, 30);
+  return trimToWordBoundary(input, MAX_OBSERVATION_CHARS);
 }
 
 function heuristicObservationFromEvent(event: EventPayload): string {
@@ -171,7 +191,7 @@ async function buildIngestObservation(input: {
         content:
           "Write a single profile observation about the user based on one ingested item. " +
           "Return JSON with only { summary }. The summary must sound like an app observation of the user " +
-          "(for example: 'You lean toward night events'). Keep it under 30 characters.",
+          "(for example: 'You lean toward night events'). Keep it under 40 characters, do not cut words, and ensure it communicates a complete idea.",
       },
       {
         role: "user",

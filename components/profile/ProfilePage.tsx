@@ -46,12 +46,25 @@ type ProfileLearnedFact = {
   generatedAt?: string;
 };
 
+function trimToWordBoundary(input: string, maxChars: number): string {
+  const clean = input.replace(/\s+/g, " ").trim();
+  if (clean.length <= maxChars) {
+    return clean;
+  }
+  const withinLimit = clean.slice(0, maxChars + 1);
+  const lastSpace = withinLimit.lastIndexOf(" ");
+  if (lastSpace <= 0) {
+    return clean.slice(0, maxChars).trim();
+  }
+  return withinLimit.slice(0, lastSpace).trim();
+}
+
 function deriveAiInsights(likedEvents: EventItem[], captureCount: number): string[] {
   const raw: string[] = [];
   if (likedEvents.length === 0 && captureCount === 0) {
     raw.push("Save events you love first");
     raw.push("Flyer snaps count too");
-    return raw.map((s) => s.slice(0, 30));
+    return raw.map((s) => trimToWordBoundary(s, 40));
   }
 
   const evening = likedEvents.filter((e) => /pm/i.test(e.date) && !/6\s*am/i.test(e.date)).length;
@@ -68,7 +81,7 @@ function deriveAiInsights(likedEvents: EventItem[], captureCount: number): strin
   if (captureCount > 0 && captureCount < 2) {
     raw.push("Saves + a flyer snap");
   }
-  return raw.slice(0, 6).map((s) => s.slice(0, 30));
+  return raw.slice(0, 6).map((s) => trimToWordBoundary(s, 40));
 }
 export default function ProfilePage() {
   const router = useRouter();
@@ -173,7 +186,7 @@ export default function ProfilePage() {
       .map((fact) => fact.text.trim())
       .filter((line) => line.length > 0)
       .slice(0, 8)
-      .map((line) => line.slice(0, 30));
+      .map((line) => trimToWordBoundary(line, 40));
     if (persisted.length > 0) {
       return persisted;
     }
