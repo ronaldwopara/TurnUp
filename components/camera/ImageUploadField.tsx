@@ -76,6 +76,9 @@ export function ImageUploadField({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [formatReject, setFormatReject] = useState(false);
 
+  const onCaptureSaveRef = useRef(onCaptureSave);
+  onCaptureSaveRef.current = onCaptureSave;
+
   useEffect(() => {
     if (typeof value === "string") {
       setPreviewUrl(value);
@@ -85,8 +88,8 @@ export function ImageUploadField({
       
       const reader = new FileReader();
       reader.onload = () => {
-        if (typeof reader.result === "string" && onCaptureSave) {
-          onCaptureSave(reader.result);
+        if (typeof reader.result === "string" && onCaptureSaveRef.current) {
+          onCaptureSaveRef.current(reader.result);
         }
       };
       reader.readAsDataURL(value);
@@ -95,7 +98,7 @@ export function ImageUploadField({
     } else {
       setPreviewUrl(defaultImage || null);
     }
-  }, [value, defaultImage, onCaptureSave]);
+  }, [value, defaultImage]);
 
   useEffect(() => {
     if (value == null) setFormatReject(false);
