@@ -2,6 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faLink } from "@fortawesome/free-solid-svg-icons";
+
+const byPrefixAndName = {
+  fas: {
+    link: faLink,
+  },
+} as const;
 
 function ProfileIcon() {
   return (
@@ -23,21 +31,11 @@ function UploadsIcon() {
 
 function LinksIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden>
-      <path
-        d="M13 19l-1.5 1.5a4 4 0 01-5.657-5.657l3-3A4 4 0 0114.5 12.5"
-        stroke="white"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M19 13l1.5-1.5a4 4 0 015.657 5.657l-3 3A4 4 0 0117.5 19.5"
-        stroke="white"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path d="M12 20l8-8" stroke="white" strokeWidth="2" strokeLinecap="round" />
-    </svg>
+    <FontAwesomeIcon
+      icon={byPrefixAndName.fas["link"]}
+      aria-hidden
+      style={{ width: 28, height: 28, color: "rgba(255,255,255,0.85)" }}
+    />
   );
 }
 
