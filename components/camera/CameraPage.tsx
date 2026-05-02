@@ -72,6 +72,24 @@ function LinksIcon() {
   );
 }
 
+function GoogleCalendarIcon() {
+  return (
+    <svg className="gcal-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden focusable="false">
+      <rect x="3.25" y="3.75" width="17.5" height="17.5" rx="4" fill="#ffffff" />
+      <rect x="3.25" y="3.75" width="17.5" height="17.5" rx="4" fill="none" stroke="rgba(255,255,255,0.22)" />
+      <path d="M3.25 9.2H20.75" stroke="rgba(0,0,0,0.12)" strokeWidth="1" />
+      {/* Google-ish accent blocks */}
+      <rect x="3.25" y="3.75" width="4.1" height="4.1" rx="3" fill="#34A853" />
+      <rect x="7.35" y="3.75" width="4.1" height="4.1" fill="#4285F4" />
+      <rect x="11.45" y="3.75" width="4.1" height="4.1" fill="#FBBC05" />
+      <rect x="15.55" y="3.75" width="5.2" height="4.1" rx="3" fill="#EA4335" />
+      <text x="9.3" y="18" fontSize="10" fontWeight="800" fill="#3c4043" fontFamily="system-ui, -apple-system, Segoe UI, Roboto, Arial">
+        1
+      </text>
+    </svg>
+  );
+}
+
 /**
  * Direct site favicons often fail in <img> because hosts send Cross-Origin-Resource-Policy: same-origin
  * (Instagram does). Google’s favicon service returns cross-origin-embeddable PNGs.
@@ -518,7 +536,8 @@ export default function CameraPage() {
             }}
             disabled={!parsedEvent.googleCalendarUrl}
           >
-            Add to Google Calendar
+            <GoogleCalendarIcon />
+            <span className="camera-result-action__label">Add to Calendar</span>
           </button>
         </div>
       ) : null}
