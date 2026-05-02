@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ScanSourceType {
+  image
+  social
+  qr
+}
+
+enum StashItemType {
+  document
+  link
+  image
+  video
+}
+
+model User {
+  id             String           @id @default(cuid())
+  displayName    String?
+  schoolLabel    String?
+  avatarUrl      String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  scans          ScanItem[]
+  stashItems     StashItem[]
+  learnedFacts   LearnedFact[]
+  profileInsights ProfileInsight[]
+}
+
+model ScanItem {
+  id              String         @id @default(cuid())
+  userId          String
+  sourceType      ScanSourceType
+  sourceUrl       String?
+  assetRef        String?
+  mimeType        String?
+  rawText         String?
+  parsedEventJson Json?
+  qrUrl           String?
+  providerRawJson Json?
+  createdAt       DateTime       @default(now())
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stashItem       StashItem?
+
+  @@index([userId, createdAt])
+}
+
+model StashItem {
+  id          String       @id @default(cuid())
+  userId      String
+  scanItemId  String?      @unique
+  itemType    StashItemType
+  title       String
+  subtitle    String?
+  detailLabel String?
+  assetRef    String?
+  sourceUrl   String?
+  createdAt   DateTime     @default(now())
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scanItem    ScanItem?    @relation(fields: [scanItemId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+}
+
+model LearnedFact {
+  id          String   @id @default(cuid())
+  userId      String
+  text        String
+  factType    String
+  confidence  Float
+  generatedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, generatedAt])
+}
+
+model ProfileInsight {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  body        String
+  generatedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, generatedAt])
+}

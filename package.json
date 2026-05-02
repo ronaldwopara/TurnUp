@@ -6,22 +6,33 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.2.0",
     "@fortawesome/free-solid-svg-icons": "^7.2.0",
     "@fortawesome/react-fontawesome": "^3.3.1",
+    "@prisma/client": "^6.8.2",
+    "jpeg-js": "^0.4.4",
+    "jsqr": "^1.4.0",
     "next": "^15.3.0",
+    "pngjs": "^7.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.3.0",
+    "prisma": "^6.8.2",
+    "vitest": "^2.1.8",
     "typescript": "^5.0.0"
   }
 }
