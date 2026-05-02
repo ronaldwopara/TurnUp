@@ -14,6 +14,7 @@ export async function POST(request: Request) {
   const response = await ingestLinkFlow({
     userId: parsed.data.userId ?? "demo-user",
     url: parsed.data.url,
+    persistDeck: parsed.data.persistDeck,
   });
   return ok(response);
 }

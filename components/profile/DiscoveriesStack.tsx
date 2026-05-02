@@ -6,12 +6,13 @@ import type { EventItem } from "@/lib/browse-data";
 import type { CaptureItem } from "@/lib/discoveries-store";
 
 export type DiscoveryStackItem =
-  | { kind: "event"; key: string; title: string; event: EventItem }
-  | { kind: "capture"; key: string; title: string; capture: CaptureItem }
+  | { kind: "event"; key: string; title: string; event: EventItem; savedAt: number }
+  | { kind: "capture"; key: string; title: string; capture: CaptureItem; savedAt: number }
   | {
       kind: "stash";
       key: string;
       title: string;
+      savedAt: number;
       stash: {
         type: "document" | "link" | "image" | "video";
         subtitle?: string | null;
@@ -22,7 +23,7 @@ export type DiscoveryStackItem =
     };
 
 const MIN_DRAG = 50;
-const MAX_CARDS_PER_DECK = 6;
+const MAX_VISIBLE_CARDS = 4;
 
 function stackTransform(index: number): { x: number; y: number; rotate: number } {
   const baseRotation = 2;
@@ -52,45 +53,41 @@ function stashGlyph(type: "document" | "link" | "image" | "video") {
 
 export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
   const itemsFingerprint = useMemo(() => items.map((it) => it.key).join("\0"), [items]);
-  const totalPages = Math.max(1, Math.ceil(items.length / MAX_CARDS_PER_DECK));
+  const totalCount = items.length;
 
-  const [page, setPage] = useState(0);
   const [topIndex, setTopIndex] = useState(0);
   const dragRef = useRef<{ x: number; y: number } | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [animating, setAnimating] = useState(false);
 
   useEffect(() => {
-    setPage(0);
     setTopIndex(0);
   }, [itemsFingerprint]);
 
   useEffect(() => {
-    setTopIndex(0);
-  }, [page]);
+    if (topIndex >= totalCount) {
+      setTopIndex(Math.max(0, totalCount - 1));
+    }
+  }, [topIndex, totalCount]);
 
-  const deckItems = useMemo(
-    () => items.slice(page * MAX_CARDS_PER_DECK, page * MAX_CARDS_PER_DECK + MAX_CARDS_PER_DECK),
-    [items, page],
-  );
-
-  const count = deckItems.length;
+  const deckItems = useMemo(() => items.slice(topIndex, topIndex + MAX_VISIBLE_CARDS), [items, topIndex]);
+  const visibleCount = deckItems.length;
 
   const cycle = useCallback(() => {
-    if (count < 2) return;
+    if (topIndex >= totalCount - 1) return;
     setAnimating(true);
-    setTopIndex((prev) => (prev + 1) % count);
+    setTopIndex((prev) => Math.min(totalCount - 1, prev + 1));
     setTimeout(() => setAnimating(false), 300);
-  }, [count]);
+  }, [topIndex, totalCount]);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (animating || count === 0) return;
+      if (animating || visibleCount === 0) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       dragRef.current = { x: e.clientX, y: e.clientY };
       setDragOffset({ x: 0, y: 0 });
     },
-    [animating, count],
+    [animating, visibleCount],
   );
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -119,14 +116,8 @@ export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
   );
 
   if (items.length === 0) return null;
-  if (count === 0) return null;
-
-  const displayOrder: number[] = [];
-  for (let i = 0; i < count; i++) {
-    displayOrder.push((topIndex + i) % count);
-  }
-
-  const topItem = deckItems[displayOrder[0]];
+  if (visibleCount === 0) return null;
+  const topItem = deckItems[0];
 
   return (
     <div className="discoveries-stack-wrap">
@@ -138,8 +129,7 @@ export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
         onPointerCancel={onPointerUp}
         style={{ touchAction: "none" }}
       >
-        {displayOrder.map((itemIdx, displayIdx) => {
-          const item = deckItems[itemIdx];
+        {deckItems.map((item, displayIdx) => {
           if (!item) return null;
           const isTop = displayIdx === 0;
           const z = 50 - displayIdx * 10;
@@ -249,32 +239,30 @@ export function DiscoveriesStack({ items }: { items: DiscoveryStackItem[] }) {
         })}
       </div>
       <p className="discoveries-stack-title">{topItem?.title ?? ""}</p>
-      {count > 1 && <p className="discoveries-stack-hint">Swipe the top card to see the next</p>}
-      {totalPages > 1 && (
-        <div className="discoveries-stack-pager">
-          <button
-            type="button"
-            className="discoveries-stack-pager-btn"
-            disabled={page <= 0}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            aria-label="Previous six discoveries"
-          >
-            ‹
-          </button>
-          <span className="discoveries-stack-pager-label">
-            {page + 1} / {totalPages}
-          </span>
-          <button
-            type="button"
-            className="discoveries-stack-pager-btn"
-            disabled={page >= totalPages - 1}
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            aria-label="Next six discoveries"
-          >
-            ›
-          </button>
-        </div>
-      )}
+      {totalCount > 1 && <p className="discoveries-stack-hint">Swipe the top card to see the next</p>}
+      <div className="discoveries-stack-pager">
+        <button
+          type="button"
+          className="discoveries-stack-pager-btn"
+          disabled={topIndex <= 0}
+          onClick={() => setTopIndex((p) => Math.max(0, p - 1))}
+          aria-label="Previous discovery"
+        >
+          ‹
+        </button>
+        <span className="discoveries-stack-pager-label">
+          {Math.min(topIndex + 1, totalCount)} / {totalCount}
+        </span>
+        <button
+          type="button"
+          className="discoveries-stack-pager-btn"
+          disabled={topIndex >= totalCount - 1}
+          onClick={() => setTopIndex((p) => Math.min(totalCount - 1, p + 1))}
+          aria-label="Next discovery"
+        >
+          ›
+        </button>
+      </div>
     </div>
   );
 }

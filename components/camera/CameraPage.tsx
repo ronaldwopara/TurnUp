@@ -7,7 +7,7 @@ import { ImageUploadField } from "./ImageUploadField";
 import { AddToCalendarButton } from "@/components/ui/AddToCalendarButton";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLink } from "@fortawesome/free-solid-svg-icons";
-import { addCapture } from "@/lib/discoveries-store";
+import { addCapture, hasDeckCredentials } from "@/lib/discoveries-store";
 
 const byPrefixAndName = {
   fas: {
@@ -193,6 +193,7 @@ export default function CameraPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canPersistDeck = hasDeckCredentials();
   const userId = "demo-user";
 
   const openSheet = (type: "uploads" | "links") => setSheet(type);
@@ -331,6 +332,7 @@ export default function CameraPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("userId", userId);
+      formData.append("persistDeck", String(canPersistDeck));
 
       const response = await fetch("/api/ingest/image", {
         method: "POST",
@@ -453,6 +455,7 @@ export default function CameraPage() {
         body: JSON.stringify({
           userId,
           url: linkValue.trim(),
+          persistDeck: canPersistDeck,
         }),
       });
 

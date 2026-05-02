@@ -21,6 +21,8 @@ import {
   getCaptures,
   getDiscoveryCount,
   buildExportDataMailto,
+  clearDeckStorage,
+  hasDeckCredentials,
 } from "@/lib/discoveries-store";
 
 import { DiscoveriesStack, type DiscoveryStackItem } from "./DiscoveriesStack";
@@ -34,6 +36,14 @@ type ProfileStashItem = {
   sourceUrl?: string | null;
   thumbnailUrl?: string | null;
   createdAt?: string;
+};
+
+type ProfileLearnedFact = {
+  id: string;
+  text: string;
+  type?: string;
+  confidence?: number;
+  generatedAt?: string;
 };
 
 function deriveAiInsights(likedEvents: EventItem[], captureCount: number): string[] {
@@ -63,8 +73,10 @@ function deriveAiInsights(likedEvents: EventItem[], captureCount: number): strin
 export default function ProfilePage() {
   const router = useRouter();
   const [profile] = useState(() => getUserProfile());
+  const [sessionNow] = useState(() => Date.now());
   const [discoveryCount, setDiscoveryCount] = useState(() => getDiscoveryCount());
   const [stashes, setStashes] = useState<ProfileStashItem[]>([]);
+  const [learnedFacts, setLearnedFacts] = useState<ProfileLearnedFact[]>([]);
   const [googleConnected, setGoogleConnected] = useState(false);
 
   const [uniSheetOpen, setUniSheetOpen] = useState(false);
@@ -78,16 +90,25 @@ export default function ProfilePage() {
 
   const [likesVersion, setLikesVersion] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const hasCredentials = hasDeckCredentials(profile);
 
   const selectedUniversity = useMemo(() => {
     return UNIVERSITIES.find((u) => u.id === selectedUniversityId) ?? UNIVERSITIES[0];
   }, [selectedUniversityId]);
 
-  const likedEvents = useMemo(() => {
+  const likedEventIds = useMemo(() => {
     void likesVersion;
-    const ids = new Set(getLikedEventIds());
-    return ALL_EVENTS.filter((ev) => ids.has(ev.id));
+    return getLikedEventIds();
   }, [likesVersion]);
+
+  const likedEvents = useMemo(() => {
+    const byId = new Map(ALL_EVENTS.map((ev) => [ev.id, ev]));
+    return likedEventIds
+      .slice()
+      .reverse()
+      .map((id) => byId.get(id))
+      .filter((ev): ev is EventItem => Boolean(ev));
+  }, [likedEventIds]);
 
   const captures = useMemo(() => {
     void likesVersion;
@@ -108,8 +129,16 @@ export default function ProfilePage() {
 
   const stackItems: DiscoveryStackItem[] = useMemo(() => {
     const out: DiscoveryStackItem[] = [];
-    for (const ev of dateFilteredLiked) {
-      out.push({ kind: "event", key: `ev-${ev.id}`, title: ev.title, event: ev });
+    const eventRecencyBase = sessionNow - 365 * 24 * 60 * 60 * 1000;
+    for (let i = 0; i < dateFilteredLiked.length; i++) {
+      const ev = dateFilteredLiked[i];
+      out.push({
+        kind: "event",
+        key: `ev-${ev.id}`,
+        title: ev.title,
+        event: ev,
+        savedAt: eventRecencyBase - i,
+      });
     }
     for (const cap of captures) {
       out.push({
@@ -117,6 +146,7 @@ export default function ProfilePage() {
         key: cap.id,
         title: "Saved flyer",
         capture: cap,
+        savedAt: cap.createdAt,
       });
     }
     for (const stash of stashes) {
@@ -124,6 +154,7 @@ export default function ProfilePage() {
         kind: "stash",
         key: `stash-${stash.id}`,
         title: stash.title || "Saved item",
+        savedAt: stash.createdAt ? new Date(stash.createdAt).getTime() : 0,
         stash: {
           type: stash.type,
           subtitle: stash.subtitle,
@@ -133,13 +164,21 @@ export default function ProfilePage() {
         },
       });
     }
+    out.sort((a, b) => b.savedAt - a.savedAt);
     return out;
-  }, [dateFilteredLiked, captures, stashes]);
+  }, [captures, dateFilteredLiked, sessionNow, stashes]);
 
-  const aiInsights = useMemo(
-    () => deriveAiInsights(dateFilteredLiked, captures.length),
-    [dateFilteredLiked, captures.length],
-  );
+  const aiInsights = useMemo(() => {
+    const persisted = learnedFacts
+      .map((fact) => fact.text.trim())
+      .filter((line) => line.length > 0)
+      .slice(0, 8)
+      .map((line) => line.slice(0, 30));
+    if (persisted.length > 0) {
+      return persisted;
+    }
+    return deriveAiInsights(dateFilteredLiked, captures.length);
+  }, [captures.length, dateFilteredLiked, learnedFacts]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -154,6 +193,10 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
+    if (!hasCredentials) {
+      clearDeckStorage();
+    }
+
     let isMounted = true;
 
     const loadStashes = async () => {
@@ -163,13 +206,16 @@ export default function ProfilePage() {
         const payload = (await response.json()) as {
           data?: {
             stashes?: ProfileStashItem[];
+            learnedFacts?: ProfileLearnedFact[];
           };
         };
         if (!isMounted) return;
-        setStashes(payload.data?.stashes ?? []);
+        setStashes(hasCredentials ? (payload.data?.stashes ?? []) : []);
+        setLearnedFacts(payload.data?.learnedFacts ?? []);
       } catch {
         if (!isMounted) return;
         setStashes([]);
+        setLearnedFacts([]);
       }
     };
 
@@ -181,11 +227,11 @@ export default function ProfilePage() {
       isMounted = false;
       clearInterval(t);
     };
-  }, []);
+  }, [hasCredentials]);
 
   useEffect(() => {
     setDiscoveryCount(getDiscoveryCount() + stashes.length);
-  }, [stashes.length, likesVersion]);
+  }, [hasCredentials, likesVersion, stashes.length]);
 
   useEffect(() => {
     if (!uniSheetOpen && !dateSheetOpen) return;

@@ -6,11 +6,13 @@ export const imageBase64BodySchema = z.object({
   userId: userIdSchema.optional(),
   base64Image: z.string().min(1),
   mimeType: z.string().default("image/jpeg"),
+  persistDeck: z.boolean().optional().default(true),
 });
 
 export const socialLinkBodySchema = z.object({
   userId: userIdSchema.optional(),
   url: z.string().url(),
+  persistDeck: z.boolean().optional().default(true),
 });
 
 export const stashBodySchema = z.object({

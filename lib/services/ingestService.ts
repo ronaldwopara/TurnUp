@@ -12,6 +12,7 @@ import { detectQrUrlFromImage } from "@/lib/extraction/qr";
 import { getSocialMediaContent } from "@/lib/extraction/social";
 import { fetchReadableTextFromUrl } from "@/lib/extraction/webText";
 import { saveScanAndStashItem } from "@/lib/repos/stashRepo";
+import { addLearnedFactIfNovel } from "@/lib/repos/profileRepo";
 
 type PersistInput = {
   userId: string;
@@ -79,6 +80,18 @@ const WEB_TITLE_JSON_SCHEMA = {
     },
   },
 } as const;
+const INGEST_OBSERVATION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["summary"],
+  properties: {
+    summary: {
+      type: "string",
+      description:
+        "A concise observation about the user's interests from this ingest item. Max 30 characters.",
+    },
+  },
+} as const;
 
 function inferMimeTypeFromUrl(input: string): string | undefined {
   try {
@@ -117,6 +130,101 @@ function isWeakEventTitle(title?: string): boolean {
     return true;
   }
   return false;
+}
+
+function normalizeObservationSummary(input: string): string {
+  return input.replace(/\s+/g, " ").replace(/^[\s"'`]+|[\s"'`]+$/g, "").trim().slice(0, 30);
+}
+
+function heuristicObservationFromEvent(event: EventPayload): string {
+  const haystack = [event.title, event.description, event.location].filter(Boolean).join(" ").toLowerCase();
+  if (/(music|concert|dj|jazz|rap|band)/.test(haystack)) {
+    return "You gravitate to live music";
+  }
+  if (/(hackathon|startup|tech|ai|coding|developer)/.test(haystack)) {
+    return "You seek tech-focused events";
+  }
+  if (/(food|brunch|dinner|snack|taste|market)/.test(haystack)) {
+    return "You like food-centered hangs";
+  }
+  if (/(network|career|professional|resume)/.test(haystack)) {
+    return "You value career-building events";
+  }
+  if (/(art|gallery|design|film|theatre|theater)/.test(haystack)) {
+    return "You enjoy creative scenes";
+  }
+  return "You keep exploring campus life";
+}
+
+async function buildIngestObservation(input: {
+  event: EventPayload;
+  sourceType: "image" | "link";
+  sourceUrl?: string;
+}): Promise<string> {
+  const llm = await callStructuredLlm<unknown>({
+    jsonSchemaName: "IngestObservation",
+    jsonSchema: INGEST_OBSERVATION_SCHEMA as unknown as Record<string, unknown>,
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content:
+          "Write a single profile observation about the user based on one ingested item. " +
+          "Return JSON with only { summary }. The summary must sound like an app observation of the user " +
+          "(for example: 'You lean toward night events'). Keep it under 30 characters.",
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: [
+              `Source type: ${input.sourceType}`,
+              `Source URL: ${input.sourceUrl ?? "n/a"}`,
+              `Event title: ${input.event.title}`,
+              `Event description: ${input.event.description ?? ""}`,
+              `Event date: ${input.event.date ?? ""}`,
+              `Event time: ${input.event.time ?? ""}`,
+              `Event location: ${input.event.location ?? ""}`,
+            ].join("\n"),
+          },
+        ],
+      },
+    ],
+  });
+
+  const maybeSummary = typeof llm === "object" && llm && "summary" in llm ? (llm as { summary?: unknown }).summary : undefined;
+  const llmSummary = typeof maybeSummary === "string" ? normalizeObservationSummary(maybeSummary) : "";
+  if (llmSummary.length > 0) {
+    return llmSummary;
+  }
+  return normalizeObservationSummary(heuristicObservationFromEvent(input.event));
+}
+
+async function saveIngestObservation(input: {
+  userId: string;
+  event: EventPayload;
+  sourceType: "image" | "link";
+  sourceUrl?: string;
+}) {
+  const title = input.event.title?.trim().toLowerCase() ?? "";
+  if (!title || title === "no flyer found") {
+    return;
+  }
+  const summary = await buildIngestObservation({
+    event: input.event,
+    sourceType: input.sourceType,
+    sourceUrl: input.sourceUrl,
+  });
+  if (!summary) {
+    return;
+  }
+  await addLearnedFactIfNovel({
+    userId: input.userId,
+    text: summary,
+    factType: "ingest_observation",
+    confidence: 0.72,
+  });
 }
 
 function toTitleCase(input: string): string {
@@ -530,6 +638,7 @@ export async function ingestImageFlow(input: {
   userId: string;
   imageBuffer: Buffer;
   mimeType: string;
+  persistDeck?: boolean;
 }) {
   const imageBase64 = input.imageBuffer.toString("base64");
   const qrUrl = detectQrUrlFromImage(input.imageBuffer, input.mimeType);
@@ -551,18 +660,25 @@ export async function ingestImageFlow(input: {
     });
   }
 
-  await persist({
+  if (input.persistDeck !== false) {
+    await persist({
+      userId: input.userId,
+      sourceType: qrUrl ? "qr" : "image",
+      itemType: "image",
+      mimeType: input.mimeType,
+      imageBuffer: input.imageBuffer,
+      rawText: extracted.extractedText,
+      event,
+      qrUrl,
+      providerRaw: {
+        extracted,
+      },
+    });
+  }
+  await saveIngestObservation({
     userId: input.userId,
-    sourceType: qrUrl ? "qr" : "image",
-    itemType: "image",
-    mimeType: input.mimeType,
-    imageBuffer: input.imageBuffer,
-    rawText: extracted.extractedText,
     event,
-    qrUrl,
-    providerRaw: {
-      extracted,
-    },
+    sourceType: "image",
   });
 
   return {
@@ -580,6 +696,7 @@ export async function ingestImageFlow(input: {
 export async function ingestSocialFlow(input: {
   userId: string;
   url: string;
+  persistDeck?: boolean;
 }): Promise<IngestFlowResult> {
   const social = await getSocialMediaContent({ url: input.url });
   const mediaImage = social.mediaUrl ? await downloadSocialImage(social.mediaUrl) : null;
@@ -620,20 +737,28 @@ export async function ingestSocialFlow(input: {
       : "link";
   const calendarPayload = buildCalendarPayload(extraction.event);
 
-  await persist({
+  if (input.persistDeck !== false) {
+    await persist({
+      userId: input.userId,
+      sourceType: "social",
+      itemType,
+      sourceUrl: input.url,
+      mimeType: mediaImage?.mimeType,
+      imageBuffer: mediaImage?.buffer,
+      rawText: extraction.extractedText,
+      event: extraction.event,
+      providerRaw: {
+        socialProvider: social.providerRaw,
+        mediaUrl: social.mediaUrl,
+        usedVisionExtraction: Boolean(mediaImage),
+      },
+    });
+  }
+  await saveIngestObservation({
     userId: input.userId,
-    sourceType: "social",
-    itemType,
-    sourceUrl: input.url,
-    mimeType: mediaImage?.mimeType,
-    imageBuffer: mediaImage?.buffer,
-    rawText: extraction.extractedText,
     event: extraction.event,
-    providerRaw: {
-      socialProvider: social.providerRaw,
-      mediaUrl: social.mediaUrl,
-      usedVisionExtraction: Boolean(mediaImage),
-    },
+    sourceType: "link",
+    sourceUrl: input.url,
   });
 
   return {
@@ -650,6 +775,7 @@ export async function ingestSocialFlow(input: {
 export async function ingestWebLinkFlow(input: {
   userId: string;
   url: string;
+  persistDeck?: boolean;
 }): Promise<IngestFlowResult> {
   const readableText = await fetchReadableTextFromUrl(input.url);
   const normalized = await normalizeTextToEvent({
@@ -664,14 +790,22 @@ export async function ingestWebLinkFlow(input: {
   normalized.event = enrichMissingFieldsFromWebText(normalized.event, readableText);
   const calendarPayload = buildCalendarPayload(normalized.event);
 
-  await persist({
+  if (input.persistDeck !== false) {
+    await persist({
+      userId: input.userId,
+      sourceType: "social",
+      itemType: "link",
+      sourceUrl: input.url,
+      rawText: normalized.extractedText,
+      event: normalized.event,
+      providerRaw: { readableText },
+    });
+  }
+  await saveIngestObservation({
     userId: input.userId,
-    sourceType: "social",
-    itemType: "link",
-    sourceUrl: input.url,
-    rawText: normalized.extractedText,
     event: normalized.event,
-    providerRaw: { readableText },
+    sourceType: "link",
+    sourceUrl: input.url,
   });
 
   return {
@@ -705,6 +839,7 @@ function isEventPageUrl(input: string): boolean {
 export async function ingestLinkFlow(input: {
   userId: string;
   url: string;
+  persistDeck?: boolean;
 }): Promise<IngestFlowResult> {
   if (isSocialMediaUrl(input.url)) {
     return ingestSocialFlow(input);

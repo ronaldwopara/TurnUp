@@ -89,6 +89,98 @@ export async function replaceLearnedFacts(userId: string, facts: Array<{
   });
 }
 
+function normalizeFactText(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenSet(input: string): Set<string> {
+  return new Set(
+    normalizeFactText(input)
+      .split(" ")
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3),
+  );
+}
+
+function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) {
+    return 0;
+  }
+  let intersection = 0;
+  for (const token of a) {
+    if (b.has(token)) {
+      intersection += 1;
+    }
+  }
+  const union = a.size + b.size - intersection;
+  return union > 0 ? intersection / union : 0;
+}
+
+function isSignificantlyDifferent(candidate: string, existingTexts: string[]): boolean {
+  const normalizedCandidate = normalizeFactText(candidate);
+  if (!normalizedCandidate) {
+    return false;
+  }
+  const candidateTokens = tokenSet(normalizedCandidate);
+  for (const existing of existingTexts) {
+    const normalizedExisting = normalizeFactText(existing);
+    if (!normalizedExisting) {
+      continue;
+    }
+    if (normalizedExisting === normalizedCandidate) {
+      return false;
+    }
+    if (
+      normalizedExisting.includes(normalizedCandidate) ||
+      normalizedCandidate.includes(normalizedExisting)
+    ) {
+      return false;
+    }
+    const similarity = jaccardSimilarity(candidateTokens, tokenSet(normalizedExisting));
+    if (similarity >= 0.7) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function addLearnedFactIfNovel(input: {
+  userId: string;
+  text: string;
+  factType: string;
+  confidence: number;
+}) {
+  await ensureUser(input.userId);
+  const trimmedText = input.text.trim();
+  if (!trimmedText) {
+    return null;
+  }
+
+  const existing = await db.learnedFact.findMany({
+    where: { userId: input.userId },
+    orderBy: { generatedAt: "desc" },
+    take: 30,
+    select: { text: true },
+  });
+
+  if (!isSignificantlyDifferent(trimmedText, existing.map((item) => item.text))) {
+    return null;
+  }
+
+  return db.learnedFact.create({
+    data: {
+      userId: input.userId,
+      text: trimmedText,
+      factType: input.factType,
+      confidence: Math.min(1, Math.max(0, input.confidence)),
+    },
+  });
+}
+
 export async function getProfileBundle(userId: string) {
   await ensureUser(userId);
 

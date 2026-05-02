@@ -29,10 +29,27 @@ export type UserProfile = {
   dataPrivacyAccepted?: boolean;
 };
 
+export function hasDeckCredentials(profileOverride?: UserProfile | null): boolean {
+  const profile = profileOverride ?? getUserProfile();
+  const email = profile?.schoolEmail?.trim() ?? "";
+  return email.includes("@");
+}
+
+export function clearDeckStorage(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.LIKED_EVENTS);
+    localStorage.removeItem(STORAGE_KEYS.CAPTURES);
+  } catch {
+    // ignore localStorage write failures
+  }
+}
+
 // ─── Liked events ─────────────────────────────────────────────────────────────
 
 export function getLikedEventIds(): number[] {
   if (typeof window === "undefined") return [];
+  if (!hasDeckCredentials()) return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.LIKED_EVENTS);
     if (!raw) return [];
@@ -44,6 +61,10 @@ export function getLikedEventIds(): number[] {
 
 export function setLikedEventIds(ids: number[]): void {
   if (typeof window === "undefined") return;
+  if (!hasDeckCredentials()) {
+    clearDeckStorage();
+    return;
+  }
   try {
     localStorage.setItem(STORAGE_KEYS.LIKED_EVENTS, JSON.stringify(ids));
   } catch (e) {
@@ -52,6 +73,10 @@ export function setLikedEventIds(ids: number[]): void {
 }
 
 export function toggleLikedEvent(eventId: number): boolean {
+  if (!hasDeckCredentials()) {
+    clearDeckStorage();
+    return false;
+  }
   const current = getLikedEventIds();
   const idx = current.indexOf(eventId);
   if (idx >= 0) {
@@ -73,6 +98,7 @@ export function isEventLiked(eventId: number): boolean {
 
 export function getCaptures(): CaptureItem[] {
   if (typeof window === "undefined") return [];
+  if (!hasDeckCredentials()) return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CAPTURES);
     if (!raw) return [];
@@ -84,6 +110,10 @@ export function getCaptures(): CaptureItem[] {
 
 function setCaptures(captures: CaptureItem[]): void {
   if (typeof window === "undefined") return;
+  if (!hasDeckCredentials()) {
+    clearDeckStorage();
+    return;
+  }
   try {
     localStorage.setItem(STORAGE_KEYS.CAPTURES, JSON.stringify(captures));
   } catch (e) {
@@ -93,6 +123,10 @@ function setCaptures(captures: CaptureItem[]): void {
 
 export function addCapture(dataUrl: string): CaptureItem | null {
   if (typeof window === "undefined") return null;
+  if (!hasDeckCredentials()) {
+    clearDeckStorage();
+    return null;
+  }
 
   const sizeKB = dataUrl.length / 1024;
   if (sizeKB > MAX_CAPTURE_SIZE_KB) {

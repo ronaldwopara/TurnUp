@@ -41,6 +41,7 @@ async function parseImageRequest(request: Request): Promise<
       userId: string;
       imageBuffer: Buffer;
       mimeType: string;
+      persistDeck: boolean;
     }
   | { error: string }
 > {
@@ -50,6 +51,8 @@ async function parseImageRequest(request: Request): Promise<
     const formData = await request.formData();
     const file = formData.get("file");
     const userId = String(formData.get("userId") ?? "demo-user");
+    const persistDeckRaw = String(formData.get("persistDeck") ?? "true").toLowerCase();
+    const persistDeck = persistDeckRaw !== "false" && persistDeckRaw !== "0";
 
     if (!(file instanceof File)) {
       return { error: "Expected a file upload for image ingest." };
@@ -69,6 +72,7 @@ async function parseImageRequest(request: Request): Promise<
       userId,
       imageBuffer: Buffer.from(arrayBuffer),
       mimeType,
+      persistDeck,
     };
   }
 
@@ -92,6 +96,7 @@ async function parseImageRequest(request: Request): Promise<
     userId: parsed.data.userId ?? "demo-user",
     imageBuffer,
     mimeType,
+    persistDeck: parsed.data.persistDeck,
   };
 }
 
