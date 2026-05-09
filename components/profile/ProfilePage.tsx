@@ -24,6 +24,7 @@ import {
   clearDeckStorage,
   hasDeckCredentials,
 } from "@/lib/discoveries-store";
+import { setPermissionStep } from "@/lib/onboarding-perms";
 
 import { DiscoveriesStack, type DiscoveryStackItem } from "./DiscoveriesStack";
 
@@ -452,7 +453,10 @@ export default function ProfilePage() {
           <button
             type="button"
             className="profile-permission-btn"
-            onClick={() => router.push("/?resume=permissions")}
+            onClick={() => {
+              setPermissionStep(0);
+              router.push("/?resume=permissions");
+            }}
           >
             Permissions Request
           </button>

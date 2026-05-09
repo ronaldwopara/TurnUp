@@ -366,14 +366,27 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
   const [locationCity, setLocationCity] = useState("");
 
   useEffect(() => {
-    // Always start onboarding permissions from step 0 on each reload.
-    setPermissionStep(0);
-    setPermStepState(0);
+    // When entering from Profile, always restart the flow from step 0.
+    if (fromProfile) {
+      setPermissionStep(0);
+      setPermStepState(0);
+    } else {
+      setPermStepState(getPermissionStep());
+    }
     const profile = getUserProfile();
     if (profile?.locationCity) {
       setLocationCity(profile.locationCity);
     }
-  }, []);
+  }, [fromProfile]);
+
+  const showToast = (msg: string) => {
+    setActiveToast({
+      msg,
+      slideIndex: currentSlide,
+      accentColor,
+      key: Date.now(),
+    });
+  };
 
   const setPermStep = (updater: number | ((p: number) => number)) => {
     setPermStepState((prev) => {
@@ -566,12 +579,7 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
           className="browse-btn"
           onClick={(e) => {
             e.stopPropagation();
-            setActiveToast({
-              msg: PERMISSION_TOAST_MSGS[permStep],
-              slideIndex: currentSlide,
-              accentColor,
-              key: Date.now(),
-            });
+            showToast(PERMISSION_TOAST_MSGS[permStep]);
             if (permStep < PERMISSION_STEPS.length - 1) {
               setPermStep((p) => p + 1);
             } else {
