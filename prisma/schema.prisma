@@ -21,16 +21,17 @@ enum StashItemType {
 }
 
 model User {
-  id             String           @id @default(cuid())
-  displayName    String?
-  schoolLabel    String?
-  avatarUrl      String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  scans          ScanItem[]
-  stashItems     StashItem[]
-  learnedFacts   LearnedFact[]
+  id              String           @id @default(cuid())
+  displayName     String?
+  schoolLabel     String?
+  avatarUrl       String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  scans           ScanItem[]
+  stashItems      StashItem[]
+  learnedFacts    LearnedFact[]
   profileInsights ProfileInsight[]
+  postedFlyers    PostedFlyer[]
 }
 
 model ScanItem {
@@ -89,4 +90,35 @@ model ProfileInsight {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, generatedAt])
+}
+
+model PostedFlyer {
+  id          String       @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  eventDate   String?
+  price       String?
+  imageUrl    String?      @db.Text
+  color       String       @default("#1a1230")
+  accent      String       @default("#9b72cf")
+  published   Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events      FlyerEvent[]
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model FlyerEvent {
+  id        String      @id @default(cuid())
+  flyerId   String
+  action    String
+  actorId   String?
+  createdAt DateTime    @default(now())
+  flyer     PostedFlyer @relation(fields: [flyerId], references: [id], onDelete: Cascade)
+
+  @@index([flyerId, action, createdAt])
+  @@index([flyerId, createdAt])
 }

@@ -10,7 +10,9 @@ export type LocationLookupResult =
       reason: "unsupported" | "denied" | "unavailable" | "timeout" | "unknown" | "geocode_failed";
     };
 
-function mapGeoError(code: number): LocationLookupResult["reason"] {
+type LocationFailureReason = Extract<LocationLookupResult, { ok: false }>["reason"];
+
+function mapGeoError(code: number): LocationFailureReason {
   if (code === 1) return "denied";
   if (code === 2) return "unavailable";
   if (code === 3) return "timeout";

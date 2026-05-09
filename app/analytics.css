@@ -1,0 +1,220 @@
+.analytics-page {
+  position: absolute;
+  inset: 0;
+  background: #111;
+  color: #fff;
+  padding: 0 16px 32px;
+  font-family: 'DM Sans', sans-serif;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.analytics-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0 24px;
+  position: sticky;
+  top: 0;
+  background: #111;
+  z-index: 10;
+}
+
+.analytics-back {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.analytics-back:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.analytics-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+
+.analytics-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 16px;
+}
+
+.analytics-flyer-pills {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 16px;
+  margin-bottom: 8px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.analytics-flyer-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.analytics-pill {
+  flex-shrink: 0;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.analytics-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.analytics-pill.active {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
+}
+
+.analytics-metric-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 20px;
+  padding: 24px 20px;
+  margin-bottom: 20px;
+}
+
+.analytics-metric-header {
+  margin-bottom: 8px;
+}
+
+.analytics-metric-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0 0 4px;
+}
+
+.analytics-metric-subtitle {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.analytics-metric-value {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -2px;
+  color: #93c5fd;
+  margin: 16px 0 20px;
+}
+
+.analytics-chart-wrap {
+  margin: 0 -4px 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.metric-chart {
+  display: block;
+}
+
+.analytics-selectors {
+  display: flex;
+  gap: 12px;
+}
+
+.analytics-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analytics-selector-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 500;
+}
+
+.analytics-dropdown {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 140px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M6 9l6 6 6-6' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+}
+
+.analytics-dropdown:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.analytics-dropdown option {
+  background: #222;
+  color: #fff;
+}
+
+.analytics-kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.analytics-kpi {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 16px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analytics-kpi-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.analytics-kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+
+.analytics-footer {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+  margin: 0;
+  padding-top: 8px;
+}

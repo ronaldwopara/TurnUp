@@ -10,10 +10,9 @@ import {
   useTweaks,
 } from "@/components/tweaks-panel";
 
-import { getUserProfile, setUserProfile } from "@/lib/discoveries-store";
+import { getUserProfile, setUserProfile, setAiSchools, type AiSchool } from "@/lib/discoveries-store";
 import { getPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
-import { UNIVERSITIES, universitiesForCity } from "@/lib/browse-data";
-import { requestUserCityFromBrowser } from "@/lib/onboarding-location";
+import { UNIVERSITIES } from "@/lib/browse-data";
 
 const EVENT_WORDS = [
   "tribe",
@@ -277,15 +276,6 @@ const PERMISSION_TOAST_MSGS = [
   "Snap posters, capture moments, and create events in seconds.",
 ];
 
-const LOCATION_PERMISSION_ERRORS: Record<string, string> = {
-  unsupported: "Location isn't supported in this browser. You can pick your university manually.",
-  denied: "Location permission denied. You can still continue and choose manually.",
-  unavailable: "We couldn't get your location. Try again or continue without it.",
-  timeout: "Location request timed out. Try again or continue without it.",
-  unknown: "Couldn't get your location right now. You can continue without it.",
-  geocode_failed: "Location found, but city lookup failed. You can continue without it.",
-};
-
 /** Toast chrome follows the visible onboarding slide (0 = accent from tweaks, 1 = red slide, 2 = green slide). */
 type ToastItem = {
   msg: string;
@@ -388,6 +378,109 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
     });
   };
 
+  async function requestLocation(): Promise<{ ok: boolean; lat?: number; lng?: number }> {
+    if (typeof window === "undefined") return { ok: false };
+    if (!("geolocation" in navigator)) return { ok: false };
+    return await new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ ok: true, lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve({ ok: false }),
+        { enableHighAccuracy: true, maximumAge: 15_000, timeout: 12_000 },
+      );
+    });
+  }
+
+  async function requestNotifications(): Promise<boolean> {
+    if (typeof window === "undefined") return false;
+    if (!("Notification" in window)) return false;
+    try {
+      const res = await Notification.requestPermission();
+      return res === "granted";
+    } catch {
+      return false;
+    }
+  }
+
+  async function requestCamera(): Promise<boolean> {
+    if (typeof window === "undefined") return false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      stream.getTracks().forEach((t) => t.stop());
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const handlePermissionPrimary = async () => {
+    // This must be triggered by a user gesture (click/tap) or browsers will block the prompt.
+    if (permStep === PERMISSION_STEPS.length - 1) {
+      // Last step: if camera permission isn't granted yet, prompt first; otherwise continue.
+      const ok = await requestCamera();
+      if (ok) {
+        setPermStep((p) => p + 1);
+        goCamera();
+      } else {
+        showToast("Camera permission blocked");
+      }
+      return;
+    }
+
+    if (permStep === 0) {
+      const res = await requestLocation();
+      if (res.ok) {
+        if (res.lat != null && res.lng != null) {
+          try {
+            const locRes = await fetch("/api/universities/locate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ lat: res.lat, lng: res.lng }),
+            });
+            if (locRes.ok) {
+              const payload = (await locRes.json()) as {
+                data?: {
+                  city?: string;
+                  region?: string;
+                  schools?: Array<{ name: string; abbreviation: string }>;
+                };
+              };
+              const d = payload.data;
+              const schools: AiSchool[] = (d?.schools ?? []).map((s, i) => ({
+                id: `ai_${i}_${s.abbreviation.toLowerCase()}`,
+                name: s.name,
+                abbr: s.abbreviation,
+                city: d?.city ?? "",
+              }));
+              if (schools.length > 0) {
+                setAiSchools(schools);
+                const top = schools[0];
+                const prev = getUserProfile();
+                setUserProfile({
+                  ...(prev ?? { name: "", university: "" }),
+                  universityId: top.id,
+                  university: top.name,
+                  universityAbbr: top.abbr,
+                });
+              }
+            }
+          } catch {
+            // AI locate failed — continue without schools
+          }
+        }
+        setPermStep((p) => p + 1);
+      } else {
+        showToast("Location permission blocked");
+      }
+      return;
+    }
+
+    if (permStep === 1) {
+      const ok = await requestNotifications();
+      if (ok) setPermStep((p) => p + 1);
+      else showToast("Notifications blocked");
+    }
+  };
+
   const setPermStep = (updater: number | ((p: number) => number)) => {
     setPermStepState((prev) => {
       const next = typeof updater === "function" ? (updater as (p: number) => number)(prev) : updater;
@@ -423,54 +516,6 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
 
   const goCamera = () => {
     router.push("/camera");
-  };
-
-  const persistDetectedCity = (city: string) => {
-    const previous = getUserProfile();
-    const localUniversities = universitiesForCity(city);
-    setUserProfile({
-      ...(previous ?? {}),
-      name: previous?.name ?? "",
-      university: previous?.university ?? "",
-      locationCity: city,
-      availableUniversityIds: localUniversities.map((school) => school.id),
-    });
-    setLocationCity(city);
-  };
-
-  const movePermissionStepForward = () => {
-    if (permStep === PERMISSION_STEPS.length - 1) {
-      goCamera();
-      return;
-    }
-    setPermStep((p) => p + 1);
-  };
-
-  const handlePrimaryPermissionAction = async () => {
-    if (permStep !== 0) {
-      movePermissionStepForward();
-      return;
-    }
-
-    const result = await requestUserCityFromBrowser();
-    if (result.ok) {
-      persistDetectedCity(result.city);
-      setActiveToast({
-        msg: `Location enabled. Showing campuses near ${result.city}.`,
-        slideIndex: currentSlide,
-        accentColor,
-        key: Date.now(),
-      });
-      movePermissionStepForward();
-      return;
-    }
-
-    setActiveToast({
-      msg: LOCATION_PERMISSION_ERRORS[result.reason],
-      slideIndex: currentSlide,
-      accentColor,
-      key: Date.now(),
-    });
   };
 
   const currentPermissionLabel =
@@ -569,7 +614,7 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
             style={{ cursor: "pointer" }}
             onClick={async (e) => {
               e.stopPropagation();
-              await handlePrimaryPermissionAction();
+              await handlePermissionPrimary();
             }}
             onTouchEnd={(e) => e.stopPropagation()}
           />

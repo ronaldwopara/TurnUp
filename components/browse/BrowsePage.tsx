@@ -24,8 +24,9 @@ import {
   type AmenityId,
   type EventItem,
   type AppliedDateFilter,
+  type University,
 } from "@/lib/browse-data";
-import { getUserProfile, isEventLiked, toggleLikedEvent } from "@/lib/discoveries-store";
+import { getUserProfile, isEventLiked, setUserProfile, toggleLikedEvent, getAiSchools, getUserId } from "@/lib/discoveries-store";
 
 function DotsIcon() {
   return (
@@ -133,7 +134,10 @@ export default function BrowsePage() {
   const [ctxPos, setCtxPos] = useState({ x: 0, y: 0 });
 
   const [uniSheetOpen, setUniSheetOpen] = useState(false);
-  const [selectedUniversityId, setSelectedUniversityId] = useState<string>(ONBOARDING_HOME_UNIVERSITY_ID);
+  const [selectedUniversityId, setSelectedUniversityId] = useState<string>(() => {
+    const profile = getUserProfile();
+    return profile?.universityId || ONBOARDING_HOME_UNIVERSITY_ID;
+  });
   const [availableUniversities, setAvailableUniversities] = useState(UNIVERSITIES);
 
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
@@ -152,6 +156,24 @@ export default function BrowsePage() {
   const [amenitiesSheetOpen, setAmenitiesSheetOpen] = useState(false);
   const [pendingAmenities, setPendingAmenities] = useState<AmenityId[]>([]);
   const [appliedAmenities, setAppliedAmenities] = useState<AmenityId[]>([]);
+
+  type CommunityFlyer = {
+    id: string;
+    title: string;
+    description?: string;
+    eventDate?: string;
+    price?: string;
+    imageUrl?: string;
+    color: string;
+    accent: string;
+    createdAt: string;
+    postedBy: string;
+    impressions: number;
+    saves: number;
+    clicks: number;
+  };
+  const [communityFlyers, setCommunityFlyers] = useState<CommunityFlyer[]>([]);
+  const trackedImpressions = useRef<Set<string>>(new Set());
 
   const pendingPriceTierLabel = PRICE_TIER_LABELS[tierFromSliderPercent(pendingPriceSlider)];
 
@@ -176,6 +198,82 @@ export default function BrowsePage() {
       ONBOARDING_HOME_UNIVERSITY_ID;
     setSelectedUniversityId(nextSelected);
   }, []);
+
+  const selectedUniversityAbbr = useMemo(() => {
+    const profile = getUserProfile();
+    if (profile?.universityId === selectedUniversityId && profile.universityAbbr) return profile.universityAbbr;
+    return selectedUniversity.abbr;
+  }, [selectedUniversityId, selectedUniversity.abbr]);
+
+  const universitiesForPicker: University[] = useMemo(() => {
+    const city = selectedUniversity.city;
+    const nearby = UNIVERSITIES.filter((u) => u.city === city);
+    const rest = UNIVERSITIES.filter((u) => u.city !== city);
+    return [...nearby, ...rest];
+  }, [selectedUniversity.city]);
+
+  const universitiesForPickerFinal: University[] = useMemo(() => {
+    const aiSchools = getAiSchools();
+    if (aiSchools.length > 0) {
+      // Only show location-relevant schools when AI schools exist
+      return aiSchools.map((s) => ({ id: s.id, abbr: s.abbr, name: s.name, city: s.city }));
+    }
+    return universitiesForPicker;
+  }, [universitiesForPicker]);
+
+  // Keep Browse in sync with the latest onboarding/profile pick.
+  // (The university can be set during onboarding before the user reaches /browse.)
+  useEffect(() => {
+    const syncFromProfile = () => {
+      const profile = getUserProfile();
+      if (profile?.universityId && profile.universityId !== selectedUniversityId) {
+        setSelectedUniversityId(profile.universityId);
+      }
+    };
+
+    // Sync on mount and whenever the sheet is opened.
+    syncFromProfile();
+    if (uniSheetOpen) syncFromProfile();
+
+    // Lightweight periodic sync so navigation without reload stays correct.
+    const t = window.setInterval(syncFromProfile, 1500);
+    return () => window.clearInterval(t);
+  }, [selectedUniversityId, uniSheetOpen]);
+
+  // Load community flyers
+  useEffect(() => {
+    let cancelled = false;
+    const loadFlyers = async () => {
+      try {
+        const res = await fetch("/api/flyers", { cache: "no-store" });
+        if (!res.ok) return;
+        const payload = (await res.json()) as { data?: CommunityFlyer[] };
+        if (!cancelled && Array.isArray(payload.data)) {
+          setCommunityFlyers(payload.data);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    void loadFlyers();
+    const t = window.setInterval(loadFlyers, 10000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, []);
+
+  const trackFlyerEvent = async (flyerId: string, action: "impression" | "save" | "click") => {
+    try {
+      await fetch(`/api/flyers/${flyerId}/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, actorId: getUserId() }),
+      });
+    } catch {
+      // ignore
+    }
+  };
 
   const filteredEvents = useMemo(() => {
     let list = ALL_EVENTS;
@@ -408,7 +506,7 @@ export default function BrowsePage() {
           onClick={openUniFromCompact}
         >
           <span className="browse-compact-brand">TurnUp</span>
-          <span className="browse-compact-uni">{selectedUniversity.abbr}</span>
+          <span className="browse-compact-uni">{selectedUniversityAbbr}</span>
           <svg className="browse-compact-caret" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
             <path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -438,7 +536,7 @@ export default function BrowsePage() {
                 aria-haspopup="dialog"
                 onClick={openUniFromCompact}
               >
-                <span className="browse-location-name">{selectedUniversity.abbr}</span>
+                <span className="browse-location-name">{selectedUniversityAbbr}</span>
                 <svg className="city-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -529,6 +627,66 @@ export default function BrowsePage() {
         </div>
         </div>
 
+        {communityFlyers.length > 0 ? (
+          <section className="browse-category-strip community-section" aria-label="Community">
+            <div className="browse-section-head">
+              <span className="browse-section-title">community</span>
+              <span className="browse-section-sub">posted by organisers</span>
+            </div>
+            <div className="browse-h-scroll">
+              {communityFlyers.map((flyer) => {
+                const shouldTrackImpression = !trackedImpressions.current.has(flyer.id);
+                if (shouldTrackImpression) {
+                  trackedImpressions.current.add(flyer.id);
+                  void trackFlyerEvent(flyer.id, "impression");
+                }
+                return (
+                  <div
+                    key={flyer.id}
+                    className="event-card event-card--strip community-card"
+                    onClick={() => void trackFlyerEvent(flyer.id, "click")}
+                  >
+                    <div className="card-image">
+                      {flyer.imageUrl ? (
+                        <img
+                          src={flyer.imageUrl}
+                          alt={flyer.title}
+                          className="card-image-flyer"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div
+                          className="card-image-placeholder"
+                          style={{
+                            background: `linear-gradient(135deg, ${flyer.color} 0%, ${flyer.accent}22 100%)`,
+                          }}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        className="card-heart-btn card-glass-btn"
+                        aria-label="Save"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void trackFlyerEvent(flyer.id, "save");
+                        }}
+                      >
+                        <HeartIcon filled={false} />
+                      </button>
+                    </div>
+                    <div className="card-body">
+                      <h3 className="card-title">{flyer.title}</h3>
+                      <div className="card-description">
+                        <span className="card-posted-by">by {flyer.postedBy}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
         <div className="browse-section-head">
           <span className="browse-section-title">trending</span>
           <span className="browse-section-sub">what people are loving</span>
@@ -601,7 +759,7 @@ export default function BrowsePage() {
       >
         <div className="browse-sheet-handle" />
         <div className="browse-uni-list browse-uni-list--top">
-          {availableUniversities.map((u) => {
+          {universitiesForPickerFinal.map((u) => {
             const isSelected = u.id === selectedUniversityId;
             return (
               <button
@@ -611,6 +769,13 @@ export default function BrowsePage() {
                 aria-current={isSelected ? "true" : undefined}
                 onClick={() => {
                   setSelectedUniversityId(u.id);
+                  const prev = getUserProfile();
+                  setUserProfile({
+                    ...(prev ?? { name: "", university: "" }),
+                    universityId: u.id,
+                    university: u.name,
+                    universityAbbr: u.abbr,
+                  });
                   setUniSheetOpen(false);
                 }}
               >

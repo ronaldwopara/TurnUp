@@ -47,16 +47,25 @@ function stashThumbnailFromScan(input: {
   return undefined;
 }
 
-export async function ensureUser(userId: string) {
+export async function ensureUser(userId: string, displayName?: string) {
   return db.user.upsert({
     where: { id: userId },
-    update: {},
+    update: displayName ? { displayName } : {},
     create: {
       id: userId,
-      displayName: "TurnUp Student",
-      schoolLabel: "University of Alberta · 2025–26",
+      displayName: displayName ?? "TurnUp Student",
+      schoolLabel: "",
     },
   });
+}
+
+export async function deleteUser(userId: string): Promise<boolean> {
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    return false;
+  }
+  await db.user.delete({ where: { id: userId } });
+  return true;
 }
 
 export async function replaceLearnedFacts(userId: string, facts: Array<{

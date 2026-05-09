@@ -23,8 +23,14 @@ import {
   buildExportDataMailto,
   clearDeckStorage,
   hasDeckCredentials,
+  clearUserProfile,
+  clearAiSchools,
+  getUserId,
+  getAiSchools,
+  deleteCapture,
+  toggleLikedEvent,
 } from "@/lib/discoveries-store";
-import { setPermissionStep } from "@/lib/onboarding-perms";
+import { clearPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
 
 import { DiscoveriesStack, type DiscoveryStackItem } from "./DiscoveriesStack";
 
@@ -86,16 +92,29 @@ function deriveAiInsights(likedEvents: EventItem[], captureCount: number): strin
 }
 export default function ProfilePage() {
   const router = useRouter();
-  const [profile] = useState(() => getUserProfile());
+  const [profile, setProfile] = useState<ReturnType<typeof getUserProfile>>(null);
   const [sessionNow] = useState(() => Date.now());
-  const [discoveryCount, setDiscoveryCount] = useState(() => getDiscoveryCount());
+  const [discoveryCount, setDiscoveryCount] = useState(0);
   const [stashes, setStashes] = useState<ProfileStashItem[]>([]);
   const [learnedFacts, setLearnedFacts] = useState<ProfileLearnedFact[]>([]);
   const [googleConnected, setGoogleConnected] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setProfile(getUserProfile());
+    setDiscoveryCount(getDiscoveryCount());
+    setMounted(true);
+  }, []);
 
   const [uniSheetOpen, setUniSheetOpen] = useState(false);
   const [selectedUniversityId, setSelectedUniversityId] = useState<string>(ONBOARDING_HOME_UNIVERSITY_ID);
   const [availableUniversities, setAvailableUniversities] = useState(UNIVERSITIES);
+
+  useEffect(() => {
+    if (profile?.universityId) {
+      setSelectedUniversityId(profile.universityId);
+    }
+  }, [profile?.universityId]);
 
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 4, 1));
@@ -107,9 +126,29 @@ export default function ProfilePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const hasCredentials = hasDeckCredentials(profile);
 
+  const universitiesForPicker = useMemo(() => {
+    const aiSchools = getAiSchools();
+    if (aiSchools.length > 0) {
+      return aiSchools.map((s) => ({ id: s.id, abbr: s.abbr, name: s.name, city: s.city }));
+    }
+    return UNIVERSITIES;
+  }, []);
+
   const selectedUniversity = useMemo(() => {
-    return availableUniversities.find((u) => u.id === selectedUniversityId) ?? availableUniversities[0];
-  }, [availableUniversities, selectedUniversityId]);
+    return (
+      universitiesForPicker.find((u) => u.id === selectedUniversityId) ??
+      availableUniversities.find((u) => u.id === selectedUniversityId) ??
+      universitiesForPicker[0] ??
+      availableUniversities[0]
+    );
+  }, [universitiesForPicker, availableUniversities, selectedUniversityId]);
+
+  const selectedUniversityAbbr = useMemo(() => {
+    if (profile?.universityId === selectedUniversityId && profile.universityAbbr) {
+      return profile.universityAbbr;
+    }
+    return selectedUniversity.abbr;
+  }, [selectedUniversityId, selectedUniversity.abbr, profile]);
 
   const likedEventIds = useMemo(() => {
     void likesVersion;
@@ -165,11 +204,13 @@ export default function ProfilePage() {
       });
     }
     for (const stash of stashes) {
+      if (stash.type === "image") continue;
       out.push({
         kind: "stash",
         key: `stash-${stash.id}`,
         title: stash.title || "Saved item",
         savedAt: stash.createdAt ? new Date(stash.createdAt).getTime() : 0,
+        stashId: stash.id,
         stash: {
           type: stash.type,
           subtitle: stash.subtitle,
@@ -231,7 +272,7 @@ export default function ProfilePage() {
 
     const loadStashes = async () => {
       try {
-        const response = await fetch("/api/profile?userId=demo-user", { cache: "no-store" });
+        const response = await fetch(`/api/profile?userId=${encodeURIComponent(getUserId())}`, { cache: "no-store" });
         if (!response.ok) return;
         const payload = (await response.json()) as {
           data?: {
@@ -252,7 +293,7 @@ export default function ProfilePage() {
     void loadStashes();
     const t = setInterval(() => {
       void loadStashes();
-    }, 2000);
+    }, 60000);
     return () => {
       isMounted = false;
       clearInterval(t);
@@ -360,6 +401,46 @@ export default function ProfilePage() {
     window.location.href = buildExportDataMailto();
   };
 
+  const deleteProfileData = async () => {
+    if (typeof window === "undefined") return;
+    const confirmed = window.confirm("Delete your TurnUp profile data from this device and server?");
+    if (!confirmed) return;
+
+    const currentUserId = getUserId();
+    if (currentUserId && currentUserId !== "demo-user") {
+      try {
+        await fetch(`/api/profile?userId=${encodeURIComponent(currentUserId)}`, {
+          method: "DELETE",
+        });
+      } catch {
+        // continue with local cleanup even if server delete fails
+      }
+    }
+
+    clearDeckStorage();
+    clearUserProfile();
+    clearAiSchools();
+    clearPermissionStep();
+    try {
+      localStorage.removeItem("turnup_google_connected");
+    } catch {
+      // ignore
+    }
+    router.push("/");
+  };
+
+  if (!mounted) {
+    return (
+      <div className="browse-page profile-page">
+        <div className="profile-header-row">
+          <div className="profile-header-text">
+            <h1 className="profile-name">Loading...</h1>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="browse-page profile-page">
       <div className="profile-header-row">
@@ -392,7 +473,7 @@ export default function ProfilePage() {
               aria-haspopup="dialog"
               aria-expanded={uniSheetOpen}
             >
-              {selectedUniversity.abbr}
+              {selectedUniversityAbbr}
             </button>
 
             {appliedDateFilter ? (
@@ -434,7 +515,28 @@ export default function ProfilePage() {
             </button>
           </div>
         ) : (
-          <DiscoveriesStack items={stackItems} />
+          <DiscoveriesStack
+            items={stackItems}
+            onDelete={async (item) => {
+              if (item.kind === "capture") {
+                deleteCapture(item.capture.id);
+                setLikesVersion((v) => v + 1);
+              } else if (item.kind === "event") {
+                toggleLikedEvent(item.event.id);
+                setLikesVersion((v) => v + 1);
+              } else if (item.kind === "stash") {
+                try {
+                  const userId = getUserId();
+                  await fetch(`/api/flyers/${item.stashId}?userId=${encodeURIComponent(userId)}`, {
+                    method: "DELETE",
+                  });
+                  setStashes((prev) => prev.filter((s) => s.id !== item.stashId));
+                } catch {
+                  // ignore
+                }
+              }
+            }}
+          />
         )}
 
         <div className="profile-insights-section">
@@ -460,6 +562,16 @@ export default function ProfilePage() {
           >
             Permissions Request
           </button>
+
+          {profile?.role === "organiser" && (
+            <button
+              type="button"
+              className="profile-permission-btn profile-analytics-btn"
+              onClick={() => router.push("/analytics")}
+            >
+              Analytics
+            </button>
+          )}
 
           <div className="profile-settings-list">
             <button type="button" className="profile-settings-row" onClick={() => alert("Notification settings")}>
@@ -489,7 +601,7 @@ export default function ProfilePage() {
             <button
               type="button"
               className="profile-settings-row profile-settings-row--destructive"
-              onClick={() => alert("Delete profile data")}
+              onClick={deleteProfileData}
             >
               <span>Delete profile data</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -518,7 +630,7 @@ export default function ProfilePage() {
       >
         <div className="browse-sheet-handle" />
         <div className="browse-uni-list browse-uni-list--top">
-          {availableUniversities.map((u) => {
+          {universitiesForPicker.map((u) => {
             const isSelected = u.id === selectedUniversityId;
             return (
               <button

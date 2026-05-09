@@ -76,26 +76,35 @@ export function ImageUploadField({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [formatReject, setFormatReject] = useState(false);
 
+  const onCaptureSaveRef = useRef(onCaptureSave);
+  onCaptureSaveRef.current = onCaptureSave;
+  const processedFileRef = useRef<File | null>(null);
+
   useEffect(() => {
     if (typeof value === "string") {
       setPreviewUrl(value);
+      processedFileRef.current = null;
     } else if (value instanceof File) {
       const url = URL.createObjectURL(value);
       setPreviewUrl(url);
       
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string" && onCaptureSave) {
-          onCaptureSave(reader.result);
-        }
-      };
-      reader.readAsDataURL(value);
+      if (processedFileRef.current !== value && onCaptureSaveRef.current) {
+        processedFileRef.current = value;
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string" && onCaptureSaveRef.current) {
+            onCaptureSaveRef.current(reader.result);
+          }
+        };
+        reader.readAsDataURL(value);
+      }
       
       return () => URL.revokeObjectURL(url);
     } else {
       setPreviewUrl(defaultImage || null);
+      processedFileRef.current = null;
     }
-  }, [value, defaultImage, onCaptureSave]);
+  }, [value, defaultImage]);
 
   useEffect(() => {
     if (value == null) setFormatReject(false);
