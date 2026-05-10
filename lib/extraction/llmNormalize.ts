@@ -5,20 +5,30 @@ export async function normalizeTextToEvent(input: {
   text: string;
   sourceLabel?: string;
 }): Promise<ExtractionResult> {
+  const currentYear = new Date().getFullYear();
   const llm = await callStructuredLlm<unknown>({
     jsonSchemaName: "ExtractionResult",
     messages: [
       {
         role: "system",
         content:
-          "Normalize event information into JSON fields. Return only valid JSON with extractedText, event, ambiguityNotes.",
+          `Normalize event information into JSON fields. Return only valid JSON with extractedText, event, ambiguityNotes. ` +
+          `REFERENCE_YEAR=${currentYear} is injected by the application: use exactly this integer when the source omits a year. ` +
+          `Never substitute a different year unless it appears in the source text.`,
       },
       {
         role: "user",
         content: [
           {
             type: "text",
-            text: `Source: ${input.sourceLabel ?? "unknown"}\nText:\n${input.text}`,
+            text: [
+              `REFERENCE_YEAR=${currentYear} (integer set by the server).`,
+              `Use exactly ${currentYear} for event.date when the source text shows a date without a four-digit year; keep any printed year verbatim.`,
+              "",
+              `Source: ${input.sourceLabel ?? "unknown"}`,
+              "Text:",
+              input.text,
+            ].join("\n"),
           },
         ],
       },

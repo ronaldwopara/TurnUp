@@ -239,12 +239,29 @@ async function saveIngestObservation(input: {
   if (!summary) {
     return;
   }
-  await addLearnedFactIfNovel({
-    userId: input.userId,
-    text: summary,
-    factType: "ingest_observation",
-    confidence: 0.72,
-  });
+  try {
+    await addLearnedFactIfNovel({
+      userId: input.userId,
+      text: summary,
+      factType: "ingest_observation",
+      confidence: 0.72,
+    });
+  } catch (error) {
+    logPersistenceSkipped("ingest observation (profile)", error);
+  }
+}
+
+function logPersistenceSkipped(context: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(`[turnup] Persistence skipped — ${context}: ${message}`);
+}
+
+async function persistBestEffort(context: string, input: PersistInput): Promise<void> {
+  try {
+    await persist(input);
+  } catch (error) {
+    logPersistenceSkipped(context, error);
+  }
 }
 
 function toTitleCase(input: string): string {
@@ -681,7 +698,7 @@ export async function ingestImageFlow(input: {
   }
 
   if (input.persistDeck !== false) {
-    await persist({
+    await persistBestEffort("stash scan (image)", {
       userId: input.userId,
       sourceType: qrUrl ? "qr" : "image",
       itemType: "image",
@@ -758,7 +775,7 @@ export async function ingestSocialFlow(input: {
   const calendarPayload = buildCalendarPayload(extraction.event);
 
   if (input.persistDeck !== false) {
-    await persist({
+    await persistBestEffort("stash scan (social)", {
       userId: input.userId,
       sourceType: "social",
       itemType,
@@ -811,7 +828,7 @@ export async function ingestWebLinkFlow(input: {
   const calendarPayload = buildCalendarPayload(normalized.event);
 
   if (input.persistDeck !== false) {
-    await persist({
+    await persistBestEffort("stash scan (web link)", {
       userId: input.userId,
       sourceType: "social",
       itemType: "link",

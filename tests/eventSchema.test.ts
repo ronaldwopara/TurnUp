@@ -5,6 +5,7 @@ import {
   eventPayloadSchema,
   extractionResultSchema,
 } from "../lib/extraction/eventSchema";
+import { zonedWallClockToUtc } from "../lib/googleCalendarUrl";
 
 describe("event payload schema", () => {
   it("validates required title", () => {
@@ -70,6 +71,58 @@ describe("event payload schema", () => {
     expect(payload.googleCalendarUrl).toContain("ctz=America%2FEdmonton");
     expect(payload.outlookCalendarUrl).toContain("startdt=2026-10-04T19%3A30%3A00");
     expect(payload.outlookCalendarUrl).toContain("enddt=2026-10-04T21%3A30%3A00");
+  });
+
+  it("uses the current calendar year when the flyer date omits the year", () => {
+    const y = new Date().getFullYear();
+    const payload = buildCalendarPayload({
+      title: "Fall Mixer",
+      date: "September 15th",
+      time: "7:00 PM - 9:00 PM",
+      location: "SUB",
+      description: "",
+      confidence: 0.9,
+    });
+
+    expect(payload.googleCalendarUrl).toContain(`dates=${y}0915T`);
+  });
+
+  it("parses abbreviated month-day ranges with an explicit past year", () => {
+    const payload = buildCalendarPayload({
+      title: "Winter Conference",
+      date: "Feb 12-17, 2023",
+      location: "Convention Hall",
+      description: "",
+      confidence: 0.9,
+    });
+
+    expect(payload.googleCalendarUrl).toContain("dates=20230212%2F20230218");
+  });
+
+  it("parses month-day ranges without an explicit year using the current year", () => {
+    const y = new Date().getFullYear();
+    const payload = buildCalendarPayload({
+      title: "Career Fair Week",
+      date: "Jan 15-17",
+      location: "Quad",
+      description: "",
+      confidence: 0.9,
+    });
+
+    expect(payload.googleCalendarUrl).toContain(`dates=${y}0115%2F${y}0118`);
+  });
+
+  it("parses month day lists without of YYYY using the current year", () => {
+    const y = new Date().getFullYear();
+    const payload = buildCalendarPayload({
+      title: "Career Fair",
+      date: "Jan 6, 7, and 8",
+      location: "ETLC",
+      description: "",
+      confidence: 0.9,
+    });
+
+    expect(payload.googleCalendarUrl).toContain(`dates=${y}0106%2F${y}0109`);
   });
 
   it("parses ordinal dates and unicode dash time ranges", () => {
@@ -162,8 +215,8 @@ describe("event payload schema", () => {
       title: "ESS Career Fair 2026",
       details: "A career fair event organized by ESS for networking and job opportunities.",
       location: "ETLC Solarium",
-      start: new Date(2026, 8, 15, 10, 0, 0),
-      end: new Date(2026, 8, 15, 15, 0, 0),
+      start: zonedWallClockToUtc("America/Edmonton", 2026, 9, 15, 10, 0, 0),
+      end: zonedWallClockToUtc("America/Edmonton", 2026, 9, 15, 15, 0, 0),
       timezone: "America/Edmonton",
     });
 
@@ -177,8 +230,8 @@ describe("event payload schema", () => {
       title: "Career Fair Week",
       details: "Networking and recruiting",
       location: "ETLC Solarium",
-      start: new Date(2026, 0, 6, 0, 0, 0),
-      end: new Date(2026, 0, 8, 0, 0, 0),
+      start: zonedWallClockToUtc("America/Edmonton", 2026, 1, 6, 0, 0, 0),
+      end: zonedWallClockToUtc("America/Edmonton", 2026, 1, 8, 0, 0, 0),
       timezone: "America/Edmonton",
       isAllDay: true,
     });
@@ -189,8 +242,8 @@ describe("event payload schema", () => {
   it("builds recurring daily with RRULE", () => {
     const url = buildGoogleCalendarEventEditUrl({
       title: "ESS Career Fair",
-      start: new Date(2026, 0, 6, 10, 0, 0),
-      end: new Date(2026, 0, 8, 15, 0, 0),
+      start: zonedWallClockToUtc("America/Edmonton", 2026, 1, 6, 10, 0, 0),
+      end: zonedWallClockToUtc("America/Edmonton", 2026, 1, 8, 15, 0, 0),
       timezone: "America/Edmonton",
       recurrenceDays: 3,
     });

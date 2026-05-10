@@ -61,11 +61,29 @@ const EXTRACTION_JSON_SCHEMA = {
   },
 } as const;
 
-const SYSTEM_PROMPT =
-  "You are a vision-language extraction engine for event flyers, posters, " +
-  "invitations, and event-style graphics. Produce JSON matching the schema exactly. " +
-  "Prioritize date(s) and time for Google Calendar eventedit URLs (dates=YYYYMMDDTHHMMSS/…, ctz=IANA). " +
-  "Never refuse, never add prose outside the JSON object.";
+function buildEventFlyerExtractionSchema(referenceYear: number): Record<string, unknown> {
+  const schema = JSON.parse(JSON.stringify(EXTRACTION_JSON_SCHEMA)) as Record<string, unknown>;
+  const eventSchema = schema.properties as Record<string, unknown>;
+  const eventDef = eventSchema.event as Record<string, unknown>;
+  const eventProps = eventDef.properties as Record<string, unknown>;
+  const dateField = eventProps.date as { description: string };
+  dateField.description =
+    `Event date(s) as printed; null only if invisible. Preserve ranges (e.g. Feb 12-17, 2023). ` +
+    `If no four-digit year appears on the flyer, include year ${referenceYear} in event.date. ` +
+    `If a year is printed, use only that year—do not substitute ${referenceYear}.`;
+  return schema;
+}
+
+function buildFlyerSystemPrompt(referenceYear: number): string {
+  return (
+    "You are a vision-language extraction engine for event flyers, posters, " +
+    "invitations, and event-style graphics. Produce JSON matching the schema exactly. " +
+    "Prioritize date(s) and time for Google Calendar eventedit URLs (dates=YYYYMMDDTHHMMSS/…, ctz=IANA). " +
+    "Never refuse, never add prose outside the JSON object. " +
+    `The application sets REFERENCE_YEAR=${referenceYear}. When the flyer omits a year, use exactly ${referenceYear} in event.date. ` +
+    "When a year is visible on the flyer, transcribe that year and do not replace it."
+  );
+}
 
 const USER_PROMPT_BASE = [
   "Extract event details from this image.",
@@ -82,7 +100,8 @@ const USER_PROMPT_BASE = [
   "",
   "Reading:",
   "- Put OCR text in extractedText; summarize in description without inventing facts.",
-  "- Preserve date ranges (e.g. Jan 15-17, 2026 or Jan 6, 7, and 8 of 2026) in event.date.",
+  "- Preserve date ranges with an explicit year when printed (e.g. Feb 12-17, 2023) or without (e.g. Jan 15-17 or Jan 6, 7, and 8); missing years use REFERENCE_YEAR from the prompt header.",
+  "- If the flyer shows a month/day but no year, still include the month/day and use REFERENCE_YEAR from the header.",
   "- Preserve time ranges (e.g. 10:00 AM - 3:00 PM) in event.time.",
   "- If unreadable parts remain, explain in ambiguityNotes.",
   "",
@@ -163,11 +182,13 @@ async function callImageExtraction(input: {
   contextHint?: string;
   retryHint?: string;
 }): Promise<ExtractionResult | null> {
-  const currentYear = new Date().getFullYear();
+  const referenceYear = new Date().getFullYear();
   const promptParts = [
+    `REFERENCE_YEAR=${referenceYear} (integer set by the server—use this exact value whenever the flyer shows a date without a four-digit year).`,
+    "",
     USER_PROMPT_BASE,
     "",
-    `Current year: ${currentYear}. If a date has no year printed, assume ${currentYear} and include it in event.date.`,
+    `If any date on the flyer has no year printed, write event.date using year ${referenceYear} only. If a year is printed on the flyer, keep that year.`,
   ];
   if (input.contextHint?.trim()) {
     promptParts.push("", `Additional context: ${input.contextHint.trim()}`);
@@ -179,9 +200,9 @@ async function callImageExtraction(input: {
 
   const llm = await callStructuredLlm<unknown>({
     jsonSchemaName: "EventFlyerExtraction",
-    jsonSchema: EXTRACTION_JSON_SCHEMA as unknown as Record<string, unknown>,
+    jsonSchema: buildEventFlyerExtractionSchema(referenceYear),
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: buildFlyerSystemPrompt(referenceYear) },
       {
         role: "user",
         content: [
