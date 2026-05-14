@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 
 import { ImageUploadField } from "./ImageUploadField";
 import { AddToCalendarButton } from "@/components/ui/AddToCalendarButton";
+import { EventConfirmationForm } from "./EventConfirmationForm";
+import { ExtractionDebugPanel } from "./ExtractionDebugPanel";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLink } from "@fortawesome/free-solid-svg-icons";
 import { addCapture, hasDeckCredentials, getUserId, getUserProfile } from "@/lib/discoveries-store";
@@ -16,6 +18,60 @@ const byPrefixAndName = {
 } as const;
 
 const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
+
+type ParsedEventState = {
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  description: string;
+  googleCalendarUrl?: string;
+  extractedText?: string;
+  confidence?: number;
+  warnings?: string[];
+  debug?: {
+    titleCandidates?: string[];
+    detectedDates?: string[];
+    detectedLocations?: string[];
+    confidenceBreakdown?: Record<string, number>;
+  };
+};
+
+function toParsedEventState(payload?: {
+  event?: { title?: string; date?: string; time?: string; location?: string; description?: string };
+  calendarPayload?: { googleCalendarUrl?: string };
+  extractedText?: string;
+  ambiguityNotes?: string[];
+  deterministic?: {
+    confidence?: number;
+    warnings?: string[];
+    debug?: {
+      titleCandidates?: string[];
+      detectedDates?: string[];
+      detectedLocations?: string[];
+      confidenceBreakdown?: Record<string, number>;
+    };
+  };
+}): ParsedEventState | null {
+  const event = payload?.event;
+  const title = event?.title?.trim() ?? "";
+  if (!title || title.toLowerCase() === "no flyer found") {
+    return null;
+  }
+  const warnings = Array.from(new Set([...(payload?.ambiguityNotes ?? []), ...(payload?.deterministic?.warnings ?? [])]));
+  return {
+    title,
+    date: event?.date ?? "",
+    time: event?.time ?? "",
+    location: event?.location ?? "",
+    description: event?.description ?? "",
+    googleCalendarUrl: payload?.calendarPayload?.googleCalendarUrl,
+    extractedText: payload?.extractedText,
+    confidence: payload?.deterministic?.confidence,
+    warnings,
+    debug: payload?.deterministic?.debug,
+  };
+}
 
 async function fileFromSheetUploadValue(value: File | string | null): Promise<File | null> {
   if (value == null) {
@@ -186,11 +242,12 @@ export default function CameraPage() {
   const [sheetUploadImage, setSheetUploadImage] = useState<File | string | null>(null);
   const [linkValue, setLinkValue] = useState("");
   const [statusMessage, setStatusMessage] = useState("Requesting camera access...");
-  const [parsedEvent, setParsedEvent] = useState<{ title: string; googleCalendarUrl?: string } | null>(null);
+  const [parsedEvent, setParsedEvent] = useState<ParsedEventState | null>(null);
   const [lastCaptureDataUrl, setLastCaptureDataUrl] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [isGeneratingCalendar, setIsGeneratingCalendar] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
@@ -328,7 +385,7 @@ export default function CameraPage() {
       return;
     }
     setIsBusy(true);
-    setStatusMessage("Analyzing flyer...");
+    setStatusMessage("Extracting text...");
     setParsedEvent(null);
     try {
       const formData = new FormData();
@@ -343,24 +400,29 @@ export default function CameraPage() {
       if (!response.ok) {
         throw new Error("Image ingest failed");
       }
+      setStatusMessage("Parsing event...");
 
       const payload = (await response.json()) as {
         data?: {
-          event?: { title?: string };
+          event?: { title?: string; date?: string; time?: string; location?: string; description?: string };
           calendarPayload?: { googleCalendarUrl?: string };
+          extractedText?: string;
+          ambiguityNotes?: string[];
+          deterministic?: {
+            confidence?: number;
+            warnings?: string[];
+            debug?: {
+              titleCandidates?: string[];
+              detectedDates?: string[];
+              detectedLocations?: string[];
+              confidenceBreakdown?: Record<string, number>;
+            };
+          };
         };
       };
-      const title = payload.data?.event?.title ?? "Event parsed";
-      const isNoFlyerFound = title.trim().toLowerCase() === "no flyer found";
-      setStatusMessage(isNoFlyerFound ? "No flyer found" : "");
-      setParsedEvent(
-        isNoFlyerFound
-          ? null
-          : {
-              title,
-              googleCalendarUrl: payload.data?.calendarPayload?.googleCalendarUrl,
-            },
-      );
+      const nextEvent = toParsedEventState(payload.data);
+      setStatusMessage(nextEvent ? "" : "No flyer found");
+      setParsedEvent(nextEvent);
       if (options?.clearSheetUpload) {
         setSheetUploadImage(null);
         closeSheet();
@@ -447,7 +509,7 @@ export default function CameraPage() {
     }
 
     setIsBusy(true);
-    setStatusMessage("Analyzing link...");
+    setStatusMessage("Extracting text...");
     setParsedEvent(null);
     try {
       const response = await fetch("/api/ingest/link", {
@@ -465,24 +527,29 @@ export default function CameraPage() {
       if (!response.ok) {
         throw new Error("Link ingest failed");
       }
+      setStatusMessage("Parsing event...");
 
       const payload = (await response.json()) as {
         data?: {
-          event?: { title?: string };
+          event?: { title?: string; date?: string; time?: string; location?: string; description?: string };
           calendarPayload?: { googleCalendarUrl?: string };
+          extractedText?: string;
+          ambiguityNotes?: string[];
+          deterministic?: {
+            confidence?: number;
+            warnings?: string[];
+            debug?: {
+              titleCandidates?: string[];
+              detectedDates?: string[];
+              detectedLocations?: string[];
+              confidenceBreakdown?: Record<string, number>;
+            };
+          };
         };
       };
-      const title = payload.data?.event?.title ?? "Event parsed";
-      const isNoFlyerFound = title.trim().toLowerCase() === "no flyer found";
-      setStatusMessage(isNoFlyerFound ? "No flyer found" : "");
-      setParsedEvent(
-        isNoFlyerFound
-          ? null
-          : {
-              title,
-              googleCalendarUrl: payload.data?.calendarPayload?.googleCalendarUrl,
-            },
-      );
+      const nextEvent = toParsedEventState(payload.data);
+      setStatusMessage(nextEvent ? "" : "No flyer found");
+      setParsedEvent(nextEvent);
       setLinkValue("");
       closeSheet();
     } catch {
@@ -496,6 +563,43 @@ export default function CameraPage() {
   const cameraStatusText = isBusy ? "Processing..." : statusMessage;
   const profile = getUserProfile();
   const isOrganiser = profile?.role === "organiser";
+
+  async function openCalendarFromEditedFields() {
+    if (!parsedEvent || isGeneratingCalendar) {
+      return;
+    }
+    setIsGeneratingCalendar(true);
+    try {
+      const response = await fetch("/api/calendar/payload", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          event: {
+            title: parsedEvent.title.trim() || "Untitled Event",
+            date: parsedEvent.date.trim() || undefined,
+            time: parsedEvent.time.trim() || undefined,
+            location: parsedEvent.location.trim() || undefined,
+            description: parsedEvent.description.trim() || undefined,
+            confidence: typeof parsedEvent.confidence === "number" ? Math.max(0, Math.min(1, parsedEvent.confidence / 100)) : 0.5,
+          },
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Calendar payload failed");
+      }
+      const payload = (await response.json()) as { data?: { googleCalendarUrl?: string } };
+      const googleCalendarUrl = payload.data?.googleCalendarUrl ?? parsedEvent.googleCalendarUrl;
+      if (googleCalendarUrl) {
+        window.open(googleCalendarUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      setStatusMessage("Could not open calendar link. Check event fields.");
+    } finally {
+      setIsGeneratingCalendar(false);
+    }
+  }
 
   async function postToBrowse() {
     if (!parsedEvent || isPosting) return;
@@ -582,7 +686,30 @@ export default function CameraPage() {
           <div className="camera-result-title">
             {isOrganiser ? "Ready to post this event?" : "Ready to add this event?"}
           </div>
-          <div className="camera-result-name">{parsedEvent.title}</div>
+          <EventConfirmationForm
+            values={parsedEvent}
+            disabled={isPosting || isGeneratingCalendar}
+            onChange={(next) => {
+              setParsedEvent((current) =>
+                current
+                  ? {
+                      ...current,
+                      ...next,
+                    }
+                  : current,
+              );
+            }}
+          />
+          <div className="camera-confidence-row">
+            Confidence: {typeof parsedEvent.confidence === "number" ? `${Math.round(parsedEvent.confidence)}%` : "n/a"}
+          </div>
+          {parsedEvent.warnings?.length ? (
+            <div className="camera-warning-list">
+              {parsedEvent.warnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          ) : null}
           {isOrganiser ? (
             <button
               type="button"
@@ -595,14 +722,16 @@ export default function CameraPage() {
           ) : (
             <AddToCalendarButton
               className="camera-result-action"
-              onClick={() => {
-                if (parsedEvent.googleCalendarUrl) {
-                  window.open(parsedEvent.googleCalendarUrl, "_blank", "noopener,noreferrer");
-                }
-              }}
-              disabled={!parsedEvent.googleCalendarUrl}
+              onClick={() => void openCalendarFromEditedFields()}
+              disabled={isGeneratingCalendar}
             />
           )}
+          <ExtractionDebugPanel
+            extractedText={parsedEvent.extractedText}
+            warnings={parsedEvent.warnings}
+            confidence={parsedEvent.confidence}
+            debug={parsedEvent.debug}
+          />
         </div>
       ) : null}
 

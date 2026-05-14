@@ -156,6 +156,90 @@
       font-weight: 700;
       letter-spacing: -0.2px;
     }
+    .camera-confirm-form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .camera-confirm-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .camera-confirm-field span {
+      color: rgba(255,255,255,0.72);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .camera-confirm-field input,
+    .camera-confirm-field textarea {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      font-size: 13px;
+      padding: 9px 10px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .camera-confidence-row {
+      color: rgba(255,255,255,0.78);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .camera-warning-list {
+      border-radius: 10px;
+      border: 1px solid rgba(255,180,80,0.4);
+      background: rgba(255,180,80,0.12);
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .camera-warning-list p {
+      margin: 0;
+      color: #ffd7a6;
+      font-size: 12px;
+    }
+    .camera-debug-panel {
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.05);
+      padding: 8px;
+    }
+    .camera-debug-panel summary {
+      color: rgba(255,255,255,0.88);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .camera-debug-content {
+      margin-top: 8px;
+      color: rgba(255,255,255,0.82);
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .camera-debug-content p {
+      margin: 0;
+    }
+    .camera-debug-content ul {
+      margin: 4px 0 0;
+      padding-left: 16px;
+    }
+    .camera-debug-content pre {
+      margin: 4px 0 0;
+      white-space: pre-wrap;
+      max-height: 180px;
+      overflow: auto;
+      background: rgba(0,0,0,0.28);
+      border-radius: 8px;
+      padding: 8px;
+    }
     .camera-result-action {
       width: 100%;
       display: inline-flex;

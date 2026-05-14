@@ -5,6 +5,7 @@ import {
   eventPayloadSchema,
   extractionResultSchema,
 } from "../lib/extraction/eventSchema";
+import { parseTextToExtractionResult } from "../lib/eventExtraction/extractEventFromText";
 import { zonedWallClockToUtc } from "../lib/googleCalendarUrl";
 
 describe("event payload schema", () => {
@@ -264,5 +265,14 @@ describe("event payload schema", () => {
 
     expect(payload.googleCalendarUrl).toContain(encodeURIComponent("QR link: https://example.com/qr-ticket"));
     expect(payload.outlookCalendarUrl).not.toContain(encodeURIComponent("QR link: https://example.com/qr-ticket"));
+  });
+
+  it("maps deterministic parser output into calendar links", () => {
+    const parsed = parseTextToExtractionResult(
+      "Hack Night\nJune 18th 7:00 PM\nRoom 201, Engineering Building\nBring your laptop",
+    );
+    const payload = buildCalendarPayload(parsed.extractionResult.event);
+    expect(payload.title.toLowerCase()).toContain("hack night");
+    expect(payload.googleCalendarUrl).toContain("/eventedit");
   });
 });
