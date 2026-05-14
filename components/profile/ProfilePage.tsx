@@ -574,6 +574,12 @@ export default function ProfilePage() {
           )}
 
           <div className="profile-settings-list">
+            <button type="button" className="profile-settings-row" onClick={() => router.push("/interests")}>
+              <span>Your interests</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
             <button type="button" className="profile-settings-row" onClick={() => alert("Notification settings")}>
               <span>Notifications</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>

@@ -13,6 +13,7 @@ import {
 import { getUserProfile, setUserProfile, setAiSchools, type AiSchool } from "@/lib/discoveries-store";
 import { getPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
 import { UNIVERSITIES } from "@/lib/browse-data";
+import InterestsSelectionScreen from "@/components/profile/InterestsSelectionScreen";
 
 const EVENT_WORDS = [
   "tribe",
@@ -896,7 +897,7 @@ function IntroScreen({ onDone }: { onDone: () => void }) {
 export default function SplashApp() {
   const searchParams = useSearchParams();
   const resumeHandled = useRef(false);
-  const [stage, setStage] = useState<"intro" | "gallery" | "main">("intro");
+  const [stage, setStage] = useState<"intro" | "gallery" | "interests" | "main">("intro");
   const [mainVisible, setMainVisible] = useState(false);
   const [fromProfile, setFromProfile] = useState(false);
 
@@ -916,6 +917,9 @@ export default function SplashApp() {
 
   const handleIntroDone = useCallback(() => setStage("gallery"), []);
   const handleGalleryDone = useCallback(() => {
+    setStage("interests");
+  }, []);
+  const handleInterestsDone = useCallback(() => {
     setStage("main");
     setTimeout(() => setMainVisible(true), 80);
   }, []);
@@ -924,6 +928,13 @@ export default function SplashApp() {
     <div className="mobile-frame">
       {stage === "intro" && <IntroScreen onDone={handleIntroDone} />}
       {stage === "gallery" && <GalleryScreen onDone={handleGalleryDone} />}
+      {stage === "interests" && (
+        <InterestsSelectionScreen
+          variant="onboarding"
+          onBack={() => setStage("gallery")}
+          onContinue={handleInterestsDone}
+        />
+      )}
       <div className={`main-wrap${mainVisible ? " visible" : ""}`}>
         <PhoneScreen fromProfile={fromProfile} />
       </div>

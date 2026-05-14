@@ -31,6 +31,8 @@ export type UserProfile = {
   universityAbbr?: string;
   role?: "student" | "organiser";
   dataPrivacyAccepted?: boolean;
+  /** Stable ids from `lib/interest-tags-data` (e.g. `career-professional:networking`). */
+  interestTagIds?: string[];
 };
 
 export function hasDeckCredentials(profileOverride?: UserProfile | null): boolean {
