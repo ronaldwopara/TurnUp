@@ -28,11 +28,14 @@ export function EventConfirmationForm({ values, onChange, disabled }: EventConfi
       </label>
       <label className="camera-confirm-field">
         <span>Date</span>
-        <input
+        <textarea
           value={values.date}
           disabled={disabled}
           onChange={(event) => onChange({ ...values, date: event.target.value })}
-          placeholder="YYYY-MM-DD or natural date text"
+          placeholder={"e.g. 2026-01-06, Jan 6–8, 2026, or Jan 6, 7, & 8, 2026"}
+          rows={2}
+          spellCheck={false}
+          autoComplete="off"
         />
       </label>
       <label className="camera-confirm-field">

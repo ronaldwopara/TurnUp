@@ -60,6 +60,9 @@ export type ParsedEvent = {
 
 const MONTH_OR_WEEKDAY_RE =
   /\b(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
+/** OCR often drops the space between month and day ("JAN6"), so `\bjan\b` never matches. */
+const GLUED_MONTH_DAY_RE =
+  /(?:^|[^a-z])(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)(?=\d)/i;
 const TIME_RE = /\b\d{1,2}(?::\d{2})?\s*(am|pm)\b/i;
 const ADDRESS_HINT_RE =
   /\b(street|st\.?|road|rd\.?|ave|avenue|blvd|boulevard|drive|dr\.?|lane|ln\.?|hall|room|centre|center|building|campus|suite|unit)\b/i;
@@ -222,6 +225,9 @@ function dedupeChronoResults(results: chrono.ParsedResult[]): chrono.ParsedResul
 }
 
 function lineLikelyContainsCalendarDate(line: string): boolean {
+  if (/\d/.test(line) && GLUED_MONTH_DAY_RE.test(line)) {
+    return true;
+  }
   return MONTH_OR_WEEKDAY_RE.test(line) && /\d/.test(line);
 }
 
@@ -255,7 +261,15 @@ function uniqueFourDigitYearsInText(text: string): number[] {
 /** Lines that are clearly a calendar block, not a venue (debug: date line was winning locationScore). */
 function looksLikeDateScheduleLine(line: string): boolean {
   if (/\b20\d{2}\b/.test(line) && MONTH_OR_WEEKDAY_RE.test(line)) return true;
+  if (/\b20\d{2}\b/.test(line) && GLUED_MONTH_DAY_RE.test(line)) return true;
   if (TIME_RE.test(line) && MONTH_OR_WEEKDAY_RE.test(line)) return true;
+  if (TIME_RE.test(line) && GLUED_MONTH_DAY_RE.test(line)) return true;
+  if (GLUED_MONTH_DAY_RE.test(line) && /\d/.test(line)) {
+    if (/\d{1,2}(?:st|nd|rd|th)\b/i.test(line)) return true;
+    if (/\d{1,2}\s*[,;&]\s*\d/i.test(line)) return true;
+    if (/\d{1,2}\s*([,;&]|\band\b|[\u2013\-])\s*\d/i.test(line)) return true;
+    if (/\b20\d{2}\b/.test(line)) return true;
+  }
   if (MONTH_OR_WEEKDAY_RE.test(line) && /\d/.test(line)) {
     if (/\d{1,2}(?:st|nd|rd|th)\b/i.test(line)) return true;
     if (/\d{1,2}\s*([,;&]|\band\b|[\u2013\-])\s*\d/i.test(line)) return true;
@@ -274,7 +288,7 @@ function lineIndexesMatchingChronoPrimary(lines: string[], primaryText: string):
   const chunks = primaryText
     .split(/\n/)
     .map((s) => s.trim())
-    .filter((s) => s.length >= 3 && (/\d/.test(s) || MONTH_OR_WEEKDAY_RE.test(s)))
+    .filter((s) => s.length >= 3 && (/\d/.test(s) || MONTH_OR_WEEKDAY_RE.test(s) || GLUED_MONTH_DAY_RE.test(s)))
     .map((s) => s.toLowerCase());
   if (chunks.length === 0) return [];
 
@@ -415,6 +429,66 @@ function detectDateTime(lines: string[], text: string, referenceDate: Date): Dat
   return { start, end, rawMatches, lineIndexes, ambiguities };
 }
 
+/** Text after the last clock time (e.g. "... 3PM ETLCSolarium") — common when OCR merges schedule + venue on one line. */
+function extractEmbeddedVenueFromLine(line: string): string | null {
+  const normalized = line.replace(/\s+/g, " ").trim();
+  const matches = [...normalized.matchAll(/\d{1,2}(?::\d{2})?\s*(AM|PM)\b/gi)];
+  if (matches.length === 0) {
+    return null;
+  }
+  const last = matches[matches.length - 1]!;
+  const endPos = (last.index ?? 0) + last[0].length;
+  const tail = normalized.slice(endPos).trim();
+  if (tail.length < 3 || tail.length > 120) {
+    return null;
+  }
+  if (TIME_RE.test(tail)) {
+    return null;
+  }
+  if (looksLikeDateScheduleLine(tail)) {
+    return null;
+  }
+  if (URL_OR_EMAIL_RE.test(tail)) {
+    return null;
+  }
+  const letters = (tail.match(/[a-z]/gi) ?? []).length;
+  if (letters / tail.length < 0.45) {
+    return null;
+  }
+  return tail;
+}
+
+function embeddedVenueScore(parentLine: string, tail: string, index: number): number {
+  if (tail.length < 3 || tail.length > 120) {
+    return -100;
+  }
+  if (looksLikeDateScheduleLine(tail) || GLUED_MONTH_DAY_RE.test(tail)) {
+    return -100;
+  }
+  if (!/\d{1,2}(?::\d{2})?\s*(?:AM|PM)\b/i.test(parentLine)) {
+    return -100;
+  }
+
+  let score = 18;
+  if (/\b20\d{2}\b/.test(parentLine)) {
+    score += 8;
+  }
+  if (ADDRESS_HINT_RE.test(tail)) {
+    score += 14;
+  }
+  if (POSTAL_CODE_RE.test(tail)) {
+    score += 8;
+  }
+  if (/\s/.test(tail)) {
+    score += 6;
+  }
+  if (/[a-z][A-Z]/.test(tail)) {
+    score += 4;
+  }
+  score += Math.max(0, 8 - index);
+  return score;
+}
+
 function locationScore(line: string, index: number): number {
   if (line.length < 4 || line.length > 120) return -100;
   if (URL_OR_EMAIL_RE.test(line)) return -100;
@@ -426,16 +500,31 @@ function locationScore(line: string, index: number): number {
   if (ADDRESS_HINT_RE.test(line)) score += 14;
   if (POSTAL_CODE_RE.test(line)) score += 10;
   if (line.includes(",")) score += 4;
-  if (MONTH_OR_WEEKDAY_RE.test(line) || TIME_RE.test(line)) score -= 8;
+  if (MONTH_OR_WEEKDAY_RE.test(line) || GLUED_MONTH_DAY_RE.test(line) || TIME_RE.test(line)) score -= 8;
   score += Math.max(0, 8 - index);
   return score;
 }
 
 function detectLocation(lines: string[]): LocationDetection {
-  const scored = lines
-    .map((line, index) => ({ line, index, score: locationScore(line, index) }))
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score);
+  const scored: Array<{ line: string; index: number; score: number }> = [];
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
+    const fullScore = locationScore(line, index);
+    if (fullScore > 0) {
+      scored.push({ line, index, score: fullScore });
+    }
+
+    const embedded = extractEmbeddedVenueFromLine(line);
+    if (embedded) {
+      const embScore = embeddedVenueScore(line, embedded, index);
+      if (embScore > 0) {
+        scored.push({ line: embedded, index, score: embScore });
+      }
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score);
 
   if (scored.length === 0) {
     return {

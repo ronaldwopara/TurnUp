@@ -11,7 +11,7 @@ export type GoogleCalendarEventEditInput = {
   timezone: string;
   /** When true, `dates` uses `YYYYMMDD/YYYYMMDD` and the end date is exclusive (one day is added after the inclusive end). */
   isAllDay?: boolean;
-  /** When > 1, `dates` is only the first day’s block and `recur=RRULE:FREQ=DAILY;COUNT=…` is appended. Ignored when `isAllDay` is true. */
+  /** Positive integer: first-day `dates` window plus `recur=RRULE:FREQ=DAILY;COUNT=…`. Ignored when `isAllDay` is true or value is 1. */
   recurrenceDays?: number;
 };
 
@@ -186,7 +186,14 @@ function compareYmd(
 }
 
 /**
- * Builds a Google Calendar `eventedit` URL with `text`, `details`, `location`, `dates`, and `ctz`.
+ * Builds a Google Calendar `eventedit` URL with `text`, `details`, `location`, `dates`, optional `recur`, and `ctz`.
+ *
+ * **All-day (`isAllDay: true`)** — `dates` is `YYYYMMDD/YYYYMMDD` in the given `timezone`. Google’s all-day end is
+ * **exclusive**, so the second date is the inclusive last day plus one calendar day.
+ *
+ * **Same hours on consecutive days (`recurrenceDays` ≥ 2, not all-day)** — `dates` is only the first occurrence
+ * (`…Tstart/…Tend` on day one), and `recur=RRULE:FREQ=DAILY;COUNT=recurrenceDays` is added.
+ *
  * @see https://calendar.google.com/calendar/u/0/r/eventedit
  */
 export function buildGoogleCalendarEventEditUrl(input: GoogleCalendarEventEditInput): string {

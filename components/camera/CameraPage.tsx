@@ -25,6 +25,8 @@ type ParsedEventState = {
   time: string;
   location: string;
   description: string;
+  /** From vision extraction; kept so /api/calendar/payload can rebuild the same multi-day semantics after edits. */
+  calendarSchedule?: "daily_same_hours" | "multi_day_continuous";
   googleCalendarUrl?: string;
   extractedText?: string;
   confidence?: number;
@@ -38,7 +40,14 @@ type ParsedEventState = {
 };
 
 function toParsedEventState(payload?: {
-  event?: { title?: string; date?: string; time?: string; location?: string; description?: string };
+  event?: {
+    title?: string;
+    date?: string;
+    time?: string;
+    location?: string;
+    description?: string;
+    calendarSchedule?: "daily_same_hours" | "multi_day_continuous";
+  };
   calendarPayload?: { googleCalendarUrl?: string };
   extractedText?: string;
   ambiguityNotes?: string[];
@@ -65,6 +74,7 @@ function toParsedEventState(payload?: {
     time: event?.time ?? "",
     location: event?.location ?? "",
     description: event?.description ?? "",
+    calendarSchedule: event?.calendarSchedule,
     googleCalendarUrl: payload?.calendarPayload?.googleCalendarUrl,
     extractedText: payload?.extractedText,
     confidence: payload?.deterministic?.confidence,
@@ -404,7 +414,14 @@ export default function CameraPage() {
 
       const payload = (await response.json()) as {
         data?: {
-          event?: { title?: string; date?: string; time?: string; location?: string; description?: string };
+          event?: {
+            title?: string;
+            date?: string;
+            time?: string;
+            location?: string;
+            description?: string;
+            calendarSchedule?: "daily_same_hours" | "multi_day_continuous";
+          };
           calendarPayload?: { googleCalendarUrl?: string };
           extractedText?: string;
           ambiguityNotes?: string[];
@@ -531,7 +548,14 @@ export default function CameraPage() {
 
       const payload = (await response.json()) as {
         data?: {
-          event?: { title?: string; date?: string; time?: string; location?: string; description?: string };
+          event?: {
+            title?: string;
+            date?: string;
+            time?: string;
+            location?: string;
+            description?: string;
+            calendarSchedule?: "daily_same_hours" | "multi_day_continuous";
+          };
           calendarPayload?: { googleCalendarUrl?: string };
           extractedText?: string;
           ambiguityNotes?: string[];
@@ -582,6 +606,7 @@ export default function CameraPage() {
             time: parsedEvent.time.trim() || undefined,
             location: parsedEvent.location.trim() || undefined,
             description: parsedEvent.description.trim() || undefined,
+            calendarSchedule: parsedEvent.calendarSchedule,
             confidence: typeof parsedEvent.confidence === "number" ? Math.max(0, Math.min(1, parsedEvent.confidence / 100)) : 0.5,
           },
         }),

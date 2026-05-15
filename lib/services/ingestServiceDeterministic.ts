@@ -5,6 +5,8 @@ import {
   type EventPayload,
   type ExtractionResult,
 } from "@/lib/extraction/eventSchema";
+import { NO_FLYER_TITLE } from "@/lib/extraction/flyerLlmShared";
+import { tryExtractFromSocialPostTextWithLlm } from "@/lib/extraction/llmSocialCaption";
 import { detectQrUrlFromImage } from "@/lib/extraction/qr";
 import { getSocialMediaContent } from "@/lib/extraction/social";
 import { fetchReadableTextFromUrl } from "@/lib/extraction/webText";
@@ -165,24 +167,47 @@ function fallbackCalendarTitle(input: { event: EventPayload; sourceUrl: string }
   return title || `${hostLabel ?? "Event"} Event`;
 }
 
-function mergeDeterministicExtractions(primary: ExtractionResult, secondary: ExtractionResult): ExtractionResult {
-  const merged: ExtractionResult = {
-    extractedText: [primary.extractedText, secondary.extractedText].filter(Boolean).join("\n\n"),
-    event: { ...primary.event },
-    ambiguityNotes: Array.from(new Set([...primary.ambiguityNotes, ...secondary.ambiguityNotes])),
+function mergeSocialCaptionPrimaryExtraction(caption: ExtractionResult, vision: ExtractionResult): ExtractionResult {
+  const c = caption.event;
+  const v = vision.event;
+
+  const titleIsMissing = (t: string | undefined) =>
+    !t?.trim() || t === "Untitled Event" || t.trim().toLowerCase() === NO_FLYER_TITLE;
+
+  const pickText = (primary: string | undefined, fallback: string | undefined): string | undefined => {
+    if (primary?.trim()) return primary;
+    if (fallback?.trim()) return fallback;
+    return undefined;
   };
 
-  if (!merged.event.title || merged.event.title === "Untitled Event") merged.event.title = secondary.event.title;
-  if (!merged.event.date) merged.event.date = secondary.event.date;
-  if (!merged.event.time) merged.event.time = secondary.event.time;
-  if (!merged.event.location) merged.event.location = secondary.event.location;
-  if (!merged.event.description) merged.event.description = secondary.event.description;
-  merged.event.confidence = Math.max(primary.event.confidence ?? 0.3, secondary.event.confidence ?? 0.3);
-  if (!merged.event.calendarSchedule && secondary.event.calendarSchedule) {
-    merged.event.calendarSchedule = secondary.event.calendarSchedule;
-  }
+  const mergedTitle = titleIsMissing(c.title) ? pickText(v.title, c.title) : c.title;
+  const title = (mergedTitle?.trim() || pickText(v.title, c.title) || "Untitled Event").trim();
 
-  return merged;
+  return {
+    extractedText: [caption.extractedText, "— Image / OCR supplement —", vision.extractedText].filter(Boolean).join("\n\n"),
+    event: {
+      ...caption.event,
+      title,
+      date: pickText(c.date, v.date),
+      time: pickText(c.time, v.time),
+      location: pickText(c.location, v.location),
+      description: pickText(c.description, v.description),
+      calendarSchedule: c.calendarSchedule ?? v.calendarSchedule,
+      confidence: Math.max(c.confidence ?? 0, v.confidence ?? 0),
+    },
+    ambiguityNotes: Array.from(new Set([...caption.ambiguityNotes, ...vision.ambiguityNotes])),
+  };
+}
+
+/** When false, trust the caption path alone and skip downloading the post image for OCR. */
+function socialPostExtractionNeedsVisionFallback(extraction: ExtractionResult): boolean {
+  const ev = extraction.event;
+  const title = ev.title?.trim().toLowerCase() ?? "";
+  if (title === NO_FLYER_TITLE) return true;
+  if ((ev.confidence ?? 0) < 0.38) return true;
+  const hasWhen = Boolean(ev.date?.trim() || ev.time?.trim());
+  if (!hasWhen) return true;
+  return false;
 }
 
 async function downloadSocialImage(input: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
@@ -295,23 +320,38 @@ export async function ingestSocialFlow(input: {
   persistDeck?: boolean;
 }): Promise<IngestFlowResult> {
   const social = await getSocialMediaContent({ url: input.url });
-  const mediaImage = social.mediaUrl ? await downloadSocialImage(social.mediaUrl) : null;
   const mergedText = [social.text, social.mediaUrl ? `Media URL: ${social.mediaUrl}` : ""].filter(Boolean).join("\n");
+
+  const llmCaption = await tryExtractFromSocialPostTextWithLlm(mergedText);
   const textExtraction = parseTextToExtractionResult(mergedText);
 
-  let extractionResult = textExtraction.extractionResult;
-  let parserResult = textExtraction.parsedEvent;
+  const captionBaseline = llmCaption ?? textExtraction.extractionResult;
+  const usedCaptionLlm = Boolean(llmCaption);
 
-  if (mediaImage) {
-    const imageExtraction = await extractEventExtractionResultFromImage(mediaImage.buffer);
-    extractionResult = mergeDeterministicExtractions(imageExtraction.extractionResult, textExtraction.extractionResult);
-    parserResult = {
-      ...imageExtraction.parsedEvent,
-      confidence: Math.max(imageExtraction.parsedEvent.confidence, textExtraction.parsedEvent.confidence),
-      warnings: Array.from(
-        new Set([...(imageExtraction.parsedEvent.warnings ?? []), ...(textExtraction.parsedEvent.warnings ?? [])]),
-      ),
-    };
+  let extractionResult: ExtractionResult = captionBaseline;
+  let parserResult = parseTextToExtractionResult(extractionResult.extractedText || mergedText).parsedEvent;
+
+  let mediaImage: { buffer: Buffer; mimeType: string } | null = null;
+  let usedVisionExtraction = false;
+
+  const mediaUrl = social.mediaUrl;
+  const canTryImage = Boolean(mediaUrl && !isLikelyVideoUrl(mediaUrl));
+
+  if (canTryImage && socialPostExtractionNeedsVisionFallback(extractionResult)) {
+    mediaImage = await downloadSocialImage(mediaUrl!);
+    if (mediaImage) {
+      const imageExtraction = await extractEventExtractionResultFromImage(mediaImage.buffer);
+      extractionResult = mergeSocialCaptionPrimaryExtraction(captionBaseline, imageExtraction.extractionResult);
+      usedVisionExtraction = true;
+      parserResult = {
+        ...imageExtraction.parsedEvent,
+        confidence: Math.max(parserResult.confidence, imageExtraction.parsedEvent.confidence),
+        warnings: Array.from(
+          new Set([...(parserResult.warnings ?? []), ...(imageExtraction.parsedEvent.warnings ?? [])]),
+        ),
+        debug: imageExtraction.parsedEvent.debug ?? parserResult.debug,
+      };
+    }
   }
 
   extractionResult.event.title = fallbackCalendarTitle({ event: extractionResult.event, sourceUrl: input.url });
@@ -335,7 +375,8 @@ export async function ingestSocialFlow(input: {
       providerRaw: {
         socialProvider: social.providerRaw,
         mediaUrl: social.mediaUrl,
-        usedVisionExtraction: Boolean(mediaImage),
+        usedCaptionLlm,
+        usedVisionExtraction,
         parser: parserResult,
       },
     });

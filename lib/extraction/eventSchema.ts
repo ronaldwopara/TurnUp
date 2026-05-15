@@ -172,19 +172,43 @@ function parseMonthDayRange(input: string): {
   };
 }
 
+/** Pull trailing explicit years off the day list so digits from "2026" are not counted as days. */
+function stripTrailingListYear(daySection: string): { rest: string; year: number | null } {
+  let s = daySection.replace(/\s+/g, " ").trim();
+  const ofYear = s.match(/\s+of\s+((?:19|20)\d{2})\s*$/i);
+  if (ofYear) {
+    const year = Number(ofYear[1]);
+    s = s.slice(0, s.length - ofYear[0].length).trim();
+    return { rest: s, year: Number.isFinite(year) ? year : null };
+  }
+  const commaYear = s.match(/,\s*((?:19|20)\d{2})\s*$/);
+  if (commaYear) {
+    const year = Number(commaYear[1]);
+    s = s.replace(/,\s*(?:19|20)\d{2}\s*$/i, "").trim();
+    return { rest: s, year: Number.isFinite(year) ? year : null };
+  }
+  const spaceYear = s.match(/\s+((?:19|20)\d{2})\s*$/);
+  if (spaceYear) {
+    const year = Number(spaceYear[1]);
+    s = s.slice(0, s.length - spaceYear[0].length).trim();
+    return { rest: s, year: Number.isFinite(year) ? year : null };
+  }
+  return { rest: s, year: null };
+}
+
 function parseMonthDayList(input: string): {
   start: { year: number; month: number; day: number };
   end: { year: number; month: number; day: number };
 } | null {
   const normalized = input.trim().replace(/\s+/g, " ");
-  const listMatch = normalized.match(/^([A-Za-z]+)\s+(.+?)(?:\s+of\s+(\d{4}))?$/);
+  const listMatch = normalized.match(/^([A-Za-z]+)\s+(.+)$/);
   if (!listMatch) {
     return null;
   }
 
   const monthName = listMatch[1];
-  const daySection = listMatch[2];
-  const daySectionNorm = daySection.replace(/\s+/g, " ").trim();
+  const { rest: daySectionRaw, year: explicitYear } = stripTrailingListYear(listMatch[2]);
+  const daySectionNorm = daySectionRaw.replace(/\s+/g, " ").trim();
   if (/^\d{4}$/.test(daySectionNorm)) {
     return null;
   }
@@ -193,13 +217,14 @@ function parseMonthDayList(input: string): {
     return null;
   }
 
-  const year = listMatch[3] != null && listMatch[3] !== "" ? Number(listMatch[3]) : new Date().getFullYear();
+  const year = explicitYear ?? new Date().getFullYear();
 
   const monthDate = new Date(`${monthName} 1, ${year}`);
   if (Number.isNaN(monthDate.getTime())) {
     return null;
   }
 
+  const daySection = daySectionNorm.replace(/\s*&\s*/gi, " ");
   const dayNumbers = Array.from(daySection.matchAll(/\d{1,2}/g))
     .map((match) => Number(match[0]))
     .filter((day) => Number.isFinite(day) && day >= 1 && day <= 31);
@@ -251,6 +276,49 @@ function parseDateRange(input?: string): {
   }
 
   return null;
+}
+
+function dateRangeSpansMultipleCalendarDays(range: {
+  start: { year: number; month: number; day: number };
+  end: { year: number; month: number; day: number };
+}): boolean {
+  return (
+    range.start.year !== range.end.year ||
+    range.start.month !== range.end.month ||
+    range.start.day !== range.end.day
+  );
+}
+
+/**
+ * Returns the first candidate that `parseDateRange` resolves to more than one calendar day
+ * (month/day lists, month ranges, or explicit `YYYY-MM-DD to YYYY-MM-DD` spans).
+ */
+export function tryPickMultiDayDateStringFromCandidates(candidates: string[]): string | null {
+  for (const raw of candidates) {
+    const trimmed = raw.replace(/\s+/g, " ").trim();
+    if (!trimmed) {
+      continue;
+    }
+    const range = parseDateRange(trimmed);
+    if (range && dateRangeSpansMultipleCalendarDays(range)) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+/** Scans OCR lines (then the full collapsed string) for a printable multi-day date. */
+export function tryPickMultiDayDateStringFromOcrText(fullText: string): string | null {
+  const lines = fullText
+    .split(/\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const fromLine = tryPickMultiDayDateStringFromCandidates(lines);
+  if (fromLine) {
+    return fromLine;
+  }
+  const collapsed = fullText.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").trim();
+  return collapsed ? tryPickMultiDayDateStringFromCandidates([collapsed]) : null;
 }
 
 function parseTimeToken(input: string, fallbackMeridiem?: "am" | "pm"): { hour: number; minute: number } | null {
@@ -339,6 +407,46 @@ function inclusiveCalendarDayCount(
   return diffDays + 1;
 }
 
+/** e.g. "Jan 6, 7, & 8" / "JAN 6, 7, & 8, 2026" / "Jan 6, 7 and 8" → same session each listed day (RRULE), not one continuous span. */
+function dateStringSuggestsExplicitDayList(date?: string): boolean {
+  if (!date?.trim()) {
+    return false;
+  }
+  const s = date.trim();
+  if (/\b\d{1,2}\s*,\s*\d{1,2}\s*,/.test(s)) {
+    return true;
+  }
+  if (/\b\d{1,2}\s*&\s*\d{1,2}/.test(s)) {
+    return true;
+  }
+  if (/\band\b/i.test(s) && /\b\d{1,2}\s*,\s*\d{1,2}\b/i.test(s)) {
+    return true;
+  }
+  return false;
+}
+
+/** Both sides of "to" include a year and clock → usually one anchored span (not RRULE). */
+function timeStringSuggestsContinuousMultiDaySpan(time?: string): boolean {
+  if (!time?.trim()) {
+    return false;
+  }
+  const normalized = time.replace(/\s+/g, " ").trim();
+  const parts = normalized.split(/\s+to\s+/i).map((part) => part.trim());
+  if (parts.length !== 2) {
+    return false;
+  }
+  const [a, b] = parts;
+  if (!a || !b) {
+    return false;
+  }
+  return (
+    /\b(am|pm)\b/i.test(a) &&
+    /\b(am|pm)\b/i.test(b) &&
+    /\d{4}/.test(a) &&
+    /\d{4}/.test(b)
+  );
+}
+
 function buildCalendarDateParts(event: EventPayload): {
   startsAt?: string;
   startDate?: Date;
@@ -399,7 +507,13 @@ function buildCalendarDateParts(event: EventPayload): {
   }
 
   const spanDays = inclusiveCalendarDayCount(startDateParts, endDateParts);
-  const useDailyRecurrence = spanDays > 1 && event.calendarSchedule !== "multi_day_continuous";
+  const explicitDayList = dateStringSuggestsExplicitDayList(event.date);
+  const timeAnchorsDifferentDays = timeStringSuggestsContinuousMultiDaySpan(event.time);
+
+  const useDailyRecurrence =
+    spanDays > 1 &&
+    (event.calendarSchedule !== "multi_day_continuous" || explicitDayList) &&
+    !(event.calendarSchedule === "multi_day_continuous" && timeAnchorsDifferentDays && !explicitDayList);
 
   const blockStart = zonedWallClockToUtc(
     DEFAULT_TIMEZONE,

@@ -38,6 +38,12 @@ describe("parseEvent", () => {
     expect(parsed.location?.toLowerCase()).not.toMatch(/jan|2026/);
   });
 
+  it("rejects OCR-smushed month-day lists and reads venue from a merged schedule line", () => {
+    const parsed = parseEvent("CAREERFAIR\nJAN6,7,&8,2026\n2026 10AM-3PM ETLCSolarium");
+    expect(parsed.location?.toLowerCase()).toContain("etlc");
+    expect(parsed.location?.toLowerCase()).not.toMatch(/jan|2026/);
+  });
+
   it("does not invent a date from chrono noise like split single letters", () => {
     const parsed = parseEvent("~~ ESS\n-_— EY 5096\na\ny\nj——");
     expect(parsed.start).toBeUndefined();
