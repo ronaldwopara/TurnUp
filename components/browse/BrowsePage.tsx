@@ -27,6 +27,7 @@ import {
   type University,
 } from "@/lib/browse-data";
 import { getUserProfile, isEventLiked, setUserProfile, toggleLikedEvent, getAiSchools, getUserId } from "@/lib/discoveries-store";
+import { BrowseDeckView } from "./BrowseDeckView";
 
 function DotsIcon() {
   return (
@@ -156,6 +157,8 @@ export default function BrowsePage() {
   const [amenitiesSheetOpen, setAmenitiesSheetOpen] = useState(false);
   const [pendingAmenities, setPendingAmenities] = useState<AmenityId[]>([]);
   const [appliedAmenities, setAppliedAmenities] = useState<AmenityId[]>([]);
+
+  const [viewMode, setViewMode] = useState<"grid" | "deck">("grid");
 
   type CommunityFlyer = {
     id: string;
@@ -627,115 +630,183 @@ export default function BrowsePage() {
         </div>
         </div>
 
-        {communityFlyers.length > 0 ? (
-          <section className="browse-category-strip community-section" aria-label="Community">
-            <div className="browse-section-head">
-              <span className="browse-section-title">community</span>
-              <span className="browse-section-sub">posted by organisers</span>
-            </div>
-            <div className="browse-h-scroll">
-              {communityFlyers.map((flyer) => {
-                const shouldTrackImpression = !trackedImpressions.current.has(flyer.id);
-                if (shouldTrackImpression) {
-                  trackedImpressions.current.add(flyer.id);
-                  void trackFlyerEvent(flyer.id, "impression");
-                }
-                return (
-                  <div
-                    key={flyer.id}
-                    className="event-card event-card--strip community-card"
-                    onClick={() => void trackFlyerEvent(flyer.id, "click")}
-                  >
-                    <div className="card-image">
-                      {flyer.imageUrl ? (
-                        <img
-                          src={flyer.imageUrl}
-                          alt={flyer.title}
-                          className="card-image-flyer"
-                          draggable={false}
-                        />
-                      ) : (
-                        <div
-                          className="card-image-placeholder"
-                          style={{
-                            background: `linear-gradient(135deg, ${flyer.color} 0%, ${flyer.accent}22 100%)`,
-                          }}
-                        />
-                      )}
-                      <button
-                        type="button"
-                        className="card-heart-btn card-glass-btn"
-                        aria-label="Save"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void trackFlyerEvent(flyer.id, "save");
-                        }}
-                      >
-                        <HeartIcon filled={false} />
-                      </button>
-                    </div>
-                    <div className="card-body">
-                      <h3 className="card-title">{flyer.title}</h3>
-                      <div className="card-description">
-                        <span className="card-posted-by">by {flyer.postedBy}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        <div className="browse-section-head">
-          <span className="browse-section-title">trending</span>
-          <span className="browse-section-sub">what people are loving</span>
-        </div>
-
-        {filteredEvents.length === 0 ? (
-          <div className="browse-empty">
-            <p className="browse-empty-title">We came up empty...</p>
-            <p className="browse-empty-desc">Relax your filters and let&apos;s find your next event.</p>
-            <button type="button" className="browse-empty-reset" onClick={resetFilters}>
-              Reset Filters
-            </button>
-          </div>
-        ) : (
+        {viewMode === "grid" ? (
           <>
-            {filteredTrending.length > 0 ? (
-              <div className="masonry-grid">
-                <div className="masonry-col">
-                  {leftCol.map((ev) => (
-                    <EventCard key={ev.id} event={ev} onDots={openCtx} layout="grid" />
-                  ))}
+            {communityFlyers.length > 0 ? (
+              <section className="browse-category-strip community-section" aria-label="Community">
+                <div className="browse-section-head browse-section-head--with-toggle">
+                  <div className="browse-section-copy">
+                    <span className="browse-section-title">community</span>
+                    <span className="browse-section-sub">posted by organisers</span>
+                  </div>
+                  <div className="browse-view-toggle">
+                    <button
+                      type="button"
+                      className={`browse-view-toggle-btn${viewMode === "grid" ? " active" : ""}`}
+                      aria-label="Grid view"
+                      aria-pressed={viewMode === "grid"}
+                      onClick={() => setViewMode("grid")}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+                        <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+                        <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+                        <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className={`browse-view-toggle-btn${viewMode === "deck" ? " active" : ""}`}
+                      aria-label="Deck view"
+                      aria-pressed={viewMode === "deck"}
+                      onClick={() => setViewMode("deck")}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                        <path d="M4 9h16" stroke="currentColor" strokeWidth="1.8" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-                <div className="masonry-col masonry-col--stagger">
-                  {rightCol.map((ev) => (
-                    <EventCard key={ev.id} event={ev} onDots={openCtx} layout="grid" />
-                  ))}
+                <div className="browse-h-scroll">
+                  {communityFlyers.map((flyer) => {
+                    const shouldTrackImpression = !trackedImpressions.current.has(flyer.id);
+                    if (shouldTrackImpression) {
+                      trackedImpressions.current.add(flyer.id);
+                      void trackFlyerEvent(flyer.id, "impression");
+                    }
+                    return (
+                      <div
+                        key={flyer.id}
+                        className="event-card event-card--strip community-card"
+                        onClick={() => void trackFlyerEvent(flyer.id, "click")}
+                      >
+                        <div className="card-image">
+                          {flyer.imageUrl ? (
+                            <img
+                              src={flyer.imageUrl}
+                              alt={flyer.title}
+                              className="card-image-flyer"
+                              draggable={false}
+                            />
+                          ) : (
+                            <div
+                              className="card-image-placeholder"
+                              style={{
+                                background: `linear-gradient(135deg, ${flyer.color} 0%, ${flyer.accent}22 100%)`,
+                              }}
+                            />
+                          )}
+                          <button
+                            type="button"
+                            className="card-heart-btn card-glass-btn"
+                            aria-label="Save"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void trackFlyerEvent(flyer.id, "save");
+                            }}
+                          >
+                            <HeartIcon filled={false} />
+                          </button>
+                        </div>
+                        <div className="card-body">
+                          <h3 className="card-title">{flyer.title}</h3>
+                          <div className="card-description">
+                            <span className="card-posted-by">by {flyer.postedBy}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              </section>
             ) : null}
 
-            {filteredOtherSections.length > 0 ? (
-              <div className="browse-other-block">
-                <div className="browse-section-head browse-section-head--other">
-                  <span className="browse-section-title">Other</span>
-                  <span className="browse-section-sub">explore by vibe</span>
+            <div className={`browse-section-head${communityFlyers.length === 0 ? " browse-section-head--with-toggle" : ""}`}>
+              <div className="browse-section-copy">
+                <span className="browse-section-title">trending</span>
+                <span className="browse-section-sub">what people are loving</span>
+              </div>
+              {communityFlyers.length === 0 ? (
+                <div className="browse-view-toggle">
+                  <button
+                    type="button"
+                    className={`browse-view-toggle-btn${viewMode === "grid" ? " active" : ""}`}
+                    aria-label="Grid view"
+                    aria-pressed={viewMode === "grid"}
+                    onClick={() => setViewMode("grid")}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+                      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+                      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+                      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className={`browse-view-toggle-btn${viewMode === "deck" ? " active" : ""}`}
+                    aria-label="Deck view"
+                    aria-pressed={viewMode === "deck"}
+                    onClick={() => setViewMode("deck")}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                      <path d="M4 9h16" stroke="currentColor" strokeWidth="1.8" />
+                    </svg>
+                  </button>
                 </div>
-                {filteredOtherSections.map((section) => (
-                  <section key={section.id} className="browse-category-strip" aria-label={section.label}>
-                    <h3 className="browse-category-title">{section.label}</h3>
-                    <div className="browse-h-scroll">
-                      {section.events.map((ev) => (
-                        <EventCard key={ev.id} event={ev} onDots={openCtx} layout="strip" />
+              ) : null}
+            </div>
+
+            {filteredEvents.length === 0 ? (
+              <div className="browse-empty">
+                <p className="browse-empty-title">We came up empty...</p>
+                <p className="browse-empty-desc">Relax your filters and let&apos;s find your next event.</p>
+                <button type="button" className="browse-empty-reset" onClick={resetFilters}>
+                  Reset Filters
+                </button>
+              </div>
+            ) : (
+              <>
+                {filteredTrending.length > 0 ? (
+                  <div className="masonry-grid">
+                    <div className="masonry-col">
+                      {leftCol.map((ev) => (
+                        <EventCard key={ev.id} event={ev} onDots={openCtx} layout="grid" />
                       ))}
                     </div>
-                  </section>
-                ))}
-              </div>
-            ) : null}
+                    <div className="masonry-col masonry-col--stagger">
+                      {rightCol.map((ev) => (
+                        <EventCard key={ev.id} event={ev} onDots={openCtx} layout="grid" />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {filteredOtherSections.length > 0 ? (
+                  <div className="browse-other-block">
+                    <div className="browse-section-head browse-section-head--other">
+                      <span className="browse-section-title">Other</span>
+                      <span className="browse-section-sub">explore by vibe</span>
+                    </div>
+                    {filteredOtherSections.map((section) => (
+                      <section key={section.id} className="browse-category-strip" aria-label={section.label}>
+                        <h3 className="browse-category-title">{section.label}</h3>
+                        <div className="browse-h-scroll">
+                          {section.events.map((ev) => (
+                            <EventCard key={ev.id} event={ev} onDots={openCtx} layout="strip" />
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            )}
           </>
+        ) : (
+          <BrowseDeckView events={filteredEvents} onDots={openCtx} />
         )}
       </div>
 
