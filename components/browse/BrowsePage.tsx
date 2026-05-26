@@ -642,9 +642,9 @@ export default function BrowsePage() {
                   <div className="browse-view-toggle">
                     <button
                       type="button"
-                      className={`browse-view-toggle-btn${viewMode === "grid" ? " active" : ""}`}
+                      className="browse-view-toggle-btn active"
                       aria-label="Grid view"
-                      aria-pressed={viewMode === "grid"}
+                      aria-pressed
                       onClick={() => setViewMode("grid")}
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -656,9 +656,9 @@ export default function BrowsePage() {
                     </button>
                     <button
                       type="button"
-                      className={`browse-view-toggle-btn${viewMode === "deck" ? " active" : ""}`}
+                      className="browse-view-toggle-btn"
                       aria-label="Deck view"
-                      aria-pressed={viewMode === "deck"}
+                      aria-pressed={false}
                       onClick={() => setViewMode("deck")}
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -731,9 +731,9 @@ export default function BrowsePage() {
                 <div className="browse-view-toggle">
                   <button
                     type="button"
-                    className={`browse-view-toggle-btn${viewMode === "grid" ? " active" : ""}`}
+                    className="browse-view-toggle-btn active"
                     aria-label="Grid view"
-                    aria-pressed={viewMode === "grid"}
+                    aria-pressed
                     onClick={() => setViewMode("grid")}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -745,9 +745,9 @@ export default function BrowsePage() {
                   </button>
                   <button
                     type="button"
-                    className={`browse-view-toggle-btn${viewMode === "deck" ? " active" : ""}`}
+                    className="browse-view-toggle-btn"
                     aria-label="Deck view"
-                    aria-pressed={viewMode === "deck"}
+                    aria-pressed={false}
                     onClick={() => setViewMode("deck")}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>

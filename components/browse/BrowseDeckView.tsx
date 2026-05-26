@@ -199,7 +199,7 @@ export function BrowseDeckView({ events, onDots }: BrowseDeckViewProps) {
   const [transitionIntent, setTransitionIntent] = useState<TransitionIntent>({ axis: "y", direction: 1 });
 
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-  const animationTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const animationTimeoutRef = useRef<number | null>(null);
   const wheelCooldownRef = useRef(0);
   const eventFingerprint = useMemo(() => events.map((event) => event.id).join("\0"), [events]);
 
