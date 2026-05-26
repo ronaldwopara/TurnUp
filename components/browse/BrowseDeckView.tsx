@@ -1,11 +1,42 @@
 "use client";
 
-import { useCallback, useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 import { isEventLiked, toggleLikedEvent } from "@/lib/discoveries-store";
 import type { EventItem } from "@/lib/browse-data";
 
-const SWIPE_THRESHOLD = 72;
+const HORIZONTAL_SWIPE_THRESHOLD = 72;
+const VERTICAL_NAV_THRESHOLD = 64;
 const DIRECTION_LOCK_THRESHOLD = 12;
+const WHEEL_THRESHOLD = 22;
+const ANIMATION_DURATION_MS = 320;
+const CARD_TRANSITION = { type: "spring", damping: 25, stiffness: 300 } as const;
+
+type GestureLock = "horizontal" | "vertical" | null;
+type TransitionIntent = { axis: "x" | "y"; direction: 1 | -1 };
+
+const CARD_VARIANTS = {
+  enter: (intent: TransitionIntent) =>
+    intent.axis === "y"
+      ? { y: intent.direction === 1 ? 88 : -88, opacity: 0, scale: 0.985 }
+      : { opacity: 1, scale: 0.985 },
+  center: {
+    x: 0,
+    y: 0,
+    opacity: 1,
+    scale: 1,
+    rotate: 0,
+  },
+  exit: (intent: TransitionIntent) =>
+    intent.axis === "y"
+      ? { y: intent.direction === 1 ? -92 : 92, opacity: 0, scale: 0.985 }
+      : {
+          x: intent.direction === 1 ? 220 : -220,
+          opacity: 0,
+          scale: 0.98,
+          rotate: intent.direction === 1 ? 12 : -12,
+        },
+};
 
 function DotsIcon() {
   return (
@@ -71,12 +102,10 @@ function buildSimpleCalendarUrl(event: EventItem): string {
 type DeckCardProps = {
   event: EventItem;
   onDots: (e: MouseEvent) => void;
-  dragOffset: { x: number; y: number };
-  isDragging: boolean;
-  exitDirection: "left" | "right" | null;
+  dragOffsetX: number;
 };
 
-function DeckCard({ event, onDots, dragOffset, isDragging, exitDirection }: DeckCardProps) {
+function DeckCard({ event, onDots, dragOffsetX }: DeckCardProps) {
   const [liked, setLiked] = useState(() => isEventLiked(event.id));
 
   const handleHeartClick = (e: MouseEvent) => {
@@ -85,27 +114,12 @@ function DeckCard({ event, onDots, dragOffset, isDragging, exitDirection }: Deck
     setLiked(newState);
   };
 
-  const rotation = isDragging ? dragOffset.x * 0.05 : 0;
-  const clampedRotation = Math.max(-15, Math.min(15, rotation));
-
-  let cardClassName = "deck-card";
-  if (isDragging) cardClassName += " deck-card-dragging";
-  if (exitDirection === "right") cardClassName += " deck-card-exit-right";
-  if (exitDirection === "left") cardClassName += " deck-card-exit-left";
-
-  const swipeLabelOpacity = Math.min(1, Math.abs(dragOffset.x) / SWIPE_THRESHOLD);
-  const showCalendarLabel = dragOffset.x > 20;
-  const showSkipLabel = dragOffset.x < -20;
+  const swipeLabelOpacity = Math.min(1, Math.abs(dragOffsetX) / HORIZONTAL_SWIPE_THRESHOLD);
+  const showCalendarLabel = dragOffsetX > 20;
+  const showSkipLabel = dragOffsetX < -20;
 
   return (
-    <div
-      className={cardClassName}
-      style={{
-        transform: isDragging
-          ? `translateX(${dragOffset.x}px) rotate(${clampedRotation}deg)`
-          : undefined,
-      }}
-    >
+    <div className="deck-card">
       <div className="deck-card-image">
         <div
           className="deck-card-image-placeholder"
@@ -180,43 +194,83 @@ type BrowseDeckViewProps = {
 export function BrowseDeckView({ events, onDots }: BrowseDeckViewProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
-  const [isHorizontalLocked, setIsHorizontalLocked] = useState(false);
+  const [gestureLock, setGestureLock] = useState<GestureLock>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [transitionIntent, setTransitionIntent] = useState<TransitionIntent>({ axis: "y", direction: 1 });
 
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-  const hasLockedRef = useRef(false);
+  const animationTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const wheelCooldownRef = useRef(0);
+  const eventFingerprint = useMemo(() => events.map((event) => event.id).join("\0"), [events]);
 
   const currentEvent = events[currentIndex];
 
-  const advanceCard = useCallback((direction: "left" | "right") => {
-    setExitDirection(direction);
+  useEffect(() => {
+    setCurrentIndex(0);
+    setDragOffset({ x: 0, y: 0 });
+    setGestureLock(null);
+    setIsAnimating(false);
+  }, [eventFingerprint]);
 
-    if (direction === "right" && currentEvent) {
+  useEffect(() => {
+    return () => {
+      if (animationTimeoutRef.current != null) {
+        window.clearTimeout(animationTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const finishAnimationLater = useCallback(() => {
+    if (animationTimeoutRef.current != null) {
+      window.clearTimeout(animationTimeoutRef.current);
+    }
+    animationTimeoutRef.current = window.setTimeout(() => {
+      setIsAnimating(false);
+    }, ANIMATION_DURATION_MS);
+  }, []);
+
+  const goNext = useCallback((intent: TransitionIntent, openCalendar = false) => {
+    if (isAnimating) return;
+    if (currentIndex >= events.length) return;
+
+    setIsAnimating(true);
+    setTransitionIntent(intent);
+    setGestureLock(null);
+    setDragOffset({ x: 0, y: 0 });
+
+    if (openCalendar && currentEvent) {
       const calendarUrl = buildSimpleCalendarUrl(currentEvent);
       window.open(calendarUrl, "_blank", "noopener,noreferrer");
     }
 
-    setTimeout(() => {
-      setCurrentIndex((prev) => prev + 1);
-      setExitDirection(null);
-      setDragOffset({ x: 0, y: 0 });
-    }, 300);
-  }, [currentEvent]);
+    setCurrentIndex((prev) => Math.min(events.length, prev + 1));
+    finishAnimationLater();
+  }, [currentEvent, currentIndex, events.length, finishAnimationLater, isAnimating]);
+
+  const goPrevious = useCallback(() => {
+    if (isAnimating || currentIndex <= 0) return;
+    setIsAnimating(true);
+    setTransitionIntent({ axis: "y", direction: -1 });
+    setGestureLock(null);
+    setDragOffset({ x: 0, y: 0 });
+    setCurrentIndex((prev) => Math.max(0, prev - 1));
+    finishAnimationLater();
+  }, [currentIndex, finishAnimationLater, isAnimating]);
 
   const resetDeck = () => {
     setCurrentIndex(0);
     setDragOffset({ x: 0, y: 0 });
-    setExitDirection(null);
+    setGestureLock(null);
+    setTransitionIntent({ axis: "y", direction: 1 });
+    setIsAnimating(false);
   };
 
   const onPointerDown = useCallback((e: PointerEvent<HTMLDivElement>) => {
-    if (exitDirection) return;
+    if (isAnimating) return;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
-    hasLockedRef.current = false;
-    setIsHorizontalLocked(false);
-    setIsDragging(false);
-  }, [exitDirection]);
+    setGestureLock(null);
+    setDragOffset({ x: 0, y: 0 });
+  }, [isAnimating]);
 
   const onPointerMove = useCallback((e: PointerEvent<HTMLDivElement>) => {
     const start = dragStartRef.current;
@@ -225,22 +279,28 @@ export function BrowseDeckView({ events, onDots }: BrowseDeckViewProps) {
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
 
-    if (!hasLockedRef.current) {
+    if (gestureLock == null) {
       if (Math.abs(dx) > Math.abs(dy) + DIRECTION_LOCK_THRESHOLD) {
-        hasLockedRef.current = true;
-        setIsHorizontalLocked(true);
-        setIsDragging(true);
+        setGestureLock("horizontal");
         e.currentTarget.setPointerCapture(e.pointerId);
-      } else if (Math.abs(dy) > Math.abs(dx)) {
-        dragStartRef.current = null;
+        setDragOffset({ x: dx, y: 0 });
+        return;
+      } else if (Math.abs(dy) > Math.abs(dx) + DIRECTION_LOCK_THRESHOLD) {
+        setGestureLock("vertical");
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDragOffset({ x: 0, y: dy });
+        return;
+      } else {
         return;
       }
     }
 
-    if (isHorizontalLocked || hasLockedRef.current) {
+    if (gestureLock === "horizontal") {
       setDragOffset({ x: dx, y: 0 });
+    } else if (gestureLock === "vertical") {
+      setDragOffset({ x: 0, y: dy });
     }
-  }, [isHorizontalLocked]);
+  }, [gestureLock]);
 
   const onPointerUp = useCallback((e: PointerEvent<HTMLDivElement>) => {
     const start = dragStartRef.current;
@@ -255,27 +315,32 @@ export function BrowseDeckView({ events, onDots }: BrowseDeckViewProps) {
     }
 
     const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
 
-    if (hasLockedRef.current) {
-      if (dx > SWIPE_THRESHOLD) {
-        advanceCard("right");
-      } else if (dx < -SWIPE_THRESHOLD) {
-        advanceCard("left");
+    if (gestureLock === "horizontal") {
+      if (dx > HORIZONTAL_SWIPE_THRESHOLD) {
+        goNext({ axis: "x", direction: 1 }, true);
+      } else if (dx < -HORIZONTAL_SWIPE_THRESHOLD) {
+        goNext({ axis: "x", direction: -1 });
+      } else {
+        setDragOffset({ x: 0, y: 0 });
+      }
+    } else if (gestureLock === "vertical") {
+      if (dy <= -VERTICAL_NAV_THRESHOLD) {
+        goNext({ axis: "y", direction: 1 });
+      } else if (dy >= VERTICAL_NAV_THRESHOLD) {
+        goPrevious();
       } else {
         setDragOffset({ x: 0, y: 0 });
       }
     }
 
-    setIsDragging(false);
-    setIsHorizontalLocked(false);
-    hasLockedRef.current = false;
-  }, [advanceCard]);
+    setGestureLock(null);
+  }, [gestureLock, goNext, goPrevious]);
 
   const onPointerCancel = useCallback((e: PointerEvent<HTMLDivElement>) => {
     dragStartRef.current = null;
-    setIsDragging(false);
-    setIsHorizontalLocked(false);
-    hasLockedRef.current = false;
+    setGestureLock(null);
     setDragOffset({ x: 0, y: 0 });
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -283,6 +348,23 @@ export function BrowseDeckView({ events, onDots }: BrowseDeckViewProps) {
       /* ignore */
     }
   }, []);
+
+  const onWheel = useCallback((e: WheelEvent<HTMLDivElement>) => {
+    if (Math.abs(e.deltaY) < WHEEL_THRESHOLD) return;
+    const now = Date.now();
+    if (isAnimating || now < wheelCooldownRef.current) {
+      e.preventDefault();
+      return;
+    }
+
+    e.preventDefault();
+    wheelCooldownRef.current = now + ANIMATION_DURATION_MS;
+    if (e.deltaY > 0) {
+      goNext({ axis: "y", direction: 1 });
+    } else {
+      goPrevious();
+    }
+  }, [goNext, goPrevious, isAnimating]);
 
   if (events.length === 0) {
     return (
@@ -317,23 +399,32 @@ export function BrowseDeckView({ events, onDots }: BrowseDeckViewProps) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
-        style={{ touchAction: "pan-y" }}
+        onWheel={onWheel}
+        style={{ touchAction: "none" }}
       >
-        <DeckCard
-          key={currentEvent.id}
-          event={currentEvent}
-          onDots={onDots}
-          dragOffset={dragOffset}
-          isDragging={isDragging}
-          exitDirection={exitDirection}
-        />
-      </div>
-      <div className="deck-progress">
-        {currentIndex + 1} / {events.length}
-      </div>
-      <div className="deck-hint">
-        <span className="deck-hint-left">← Skip</span>
-        <span className="deck-hint-right">Calendar →</span>
+        <AnimatePresence custom={transitionIntent} initial={false} mode="wait">
+          <motion.div
+            key={currentEvent.id}
+            className="deck-card-motion"
+            custom={transitionIntent}
+            variants={CARD_VARIANTS}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={CARD_TRANSITION}
+            style={{
+              x: gestureLock === "horizontal" ? dragOffset.x : 0,
+              y: gestureLock === "vertical" ? dragOffset.y * 0.3 : 0,
+              rotate: gestureLock === "horizontal" ? Math.max(-15, Math.min(15, dragOffset.x * 0.05)) : 0,
+            }}
+          >
+            <DeckCard
+              event={currentEvent}
+              onDots={onDots}
+              dragOffsetX={gestureLock === "horizontal" ? dragOffset.x : 0}
+            />
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
