@@ -373,10 +373,31 @@
      * Flyer tiles — portrait ratios (not square). Tall = poster/phone flyer; short = still portrait for masonry mix.
      * aspect-ratio is width / height (CSS); narrower ratio number ⇒ taller column silhouette.
      */
-    .card-tall .card-image-placeholder {
+    .card-image-thumb {
+      position: relative;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+    }
+    .card-image-thumb .card-image-flyer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .card-tall .card-image-placeholder,
+    .card-tall .card-image-thumb {
       aspect-ratio: 9 / 16;
     }
-    .card-short .card-image-placeholder {
+    .card-short .card-image-placeholder,
+    .card-short .card-image-thumb {
+      aspect-ratio: 2 / 3;
+    }
+    .community-card .card-image-thumb {
       aspect-ratio: 2 / 3;
     }
 
@@ -1284,12 +1305,20 @@
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     }
 
-    .deck-card-image-placeholder {
+    .deck-card-image-placeholder,
+    .deck-card-image-thumb {
       position: absolute;
       inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+    .deck-card-image-thumb .card-image-flyer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
 
     .deck-card .card-dots-btn {
@@ -1469,4 +1498,214 @@
 
     .deck-reset-btn:active {
       transform: scale(0.98);
+    }
+
+    /* Event detail dialog */
+    .event-detail-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 95;
+      background: rgba(0, 0, 0, 0.78);
+      border: none;
+      padding: 0;
+      cursor: pointer;
+    }
+    .event-detail-shell {
+      position: absolute;
+      inset: 0;
+      z-index: 96;
+      display: flex;
+      flex-direction: column;
+      padding: 10px 14px 8%;
+      pointer-events: none;
+    }
+    .event-detail-back {
+      pointer-events: auto;
+      align-self: flex-start;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      margin: 0 0 10px 2px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: #fff;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .event-detail-back:active {
+      opacity: 0.7;
+    }
+    .event-detail-dialog {
+      position: relative;
+      left: auto;
+      right: auto;
+      top: auto;
+      bottom: auto;
+      flex: 1;
+      min-height: 0;
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-radius: 24px;
+      background: #000;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
+    }
+    .event-detail-poster-wrap {
+      flex-shrink: 0;
+      padding: 12px 12px 0;
+    }
+    .event-detail-poster {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      border-radius: 18px;
+      overflow: hidden;
+      background: #111;
+    }
+    .event-detail-poster-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .event-detail-poster-loading {
+      position: absolute;
+      inset: auto 0 0;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.85);
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+    }
+    .event-detail-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .event-detail-tag {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .event-detail-title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #fff;
+      line-height: 1.2;
+    }
+    .event-detail-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35em;
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .event-detail-meta-dot {
+      opacity: 0.45;
+    }
+    .event-detail-byline,
+    .event-detail-location {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.48);
+    }
+    .event-detail-description {
+      margin: 4px 0 0;
+      font-size: 14px;
+      font-weight: 450;
+      line-height: 1.5;
+      color: rgba(255, 255, 255, 0.72);
+    }
+    .event-detail-amenities {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .event-detail-amenity {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.85);
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .event-detail-source-link {
+      margin-top: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #93c5fd;
+      text-decoration: none;
+    }
+    .event-detail-source-link:hover {
+      text-decoration: underline;
+    }
+    .event-detail-actions {
+      display: grid;
+      grid-template-columns: 1fr 6fr;
+      gap: 10px;
+      align-items: stretch;
+      margin-top: 12px;
+      padding-top: 8px;
+    }
+    .event-detail-heart-btn {
+      width: 100%;
+      aspect-ratio: 1;
+      max-height: 52px;
+      justify-self: center;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.08);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      color: #fff;
+    }
+    .event-detail-heart-btn:active {
+      transform: scale(0.96);
+    }
+    .event-detail-cal-pill {
+      min-height: 48px;
+      width: 100%;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.1);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 0 18px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .event-detail-cal-pill .card-cal-favicon {
+      width: 20px;
+      height: 20px;
+    }
+    .event-detail-cal-pill:active {
+      transform: scale(0.985);
     }

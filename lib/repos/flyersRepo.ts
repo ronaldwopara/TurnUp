@@ -8,6 +8,8 @@ export type CreateFlyerInput = {
   eventDate?: string;
   price?: string;
   imageUrl?: string;
+  sourceUrl?: string;
+  calendarUrl?: string;
   color?: string;
   accent?: string;
   displayName?: string;
@@ -24,6 +26,8 @@ export async function createFlyer(input: CreateFlyerInput) {
       eventDate: input.eventDate,
       price: input.price,
       imageUrl: input.imageUrl,
+      sourceUrl: input.sourceUrl,
+      calendarUrl: input.calendarUrl,
       color: input.color ?? "#1a1230",
       accent: input.accent ?? "#9b72cf",
       published: true,
@@ -70,6 +74,8 @@ export async function getPublishedFlyers() {
         eventDate: flyer.eventDate,
         price: flyer.price,
         imageUrl: flyer.imageUrl,
+        sourceUrl: flyer.sourceUrl,
+        calendarUrl: flyer.calendarUrl,
         color: flyer.color,
         accent: flyer.accent,
         createdAt: flyer.createdAt,

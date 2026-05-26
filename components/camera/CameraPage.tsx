@@ -7,7 +7,41 @@ import { ImageUploadField } from "./ImageUploadField";
 import { AddToCalendarButton } from "@/components/ui/AddToCalendarButton";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLink } from "@fortawesome/free-solid-svg-icons";
+import { formatIngestEventSchedule } from "@/lib/browse-event-detail";
 import { addCapture, hasDeckCredentials, getUserId, getUserProfile } from "@/lib/discoveries-store";
+
+type ParsedEventResult = {
+  title: string;
+  description?: string;
+  location?: string;
+  eventDate?: string;
+  googleCalendarUrl?: string;
+};
+
+type IngestResponseData = {
+  event?: {
+    title?: string;
+    description?: string;
+    location?: string;
+    date?: string;
+    time?: string;
+  };
+  calendarPayload?: { googleCalendarUrl?: string };
+};
+
+function mapIngestToParsedEvent(data?: IngestResponseData): ParsedEventResult | null {
+  const title = data?.event?.title?.trim() ?? "";
+  if (!title || title.toLowerCase() === "no flyer found") {
+    return null;
+  }
+  return {
+    title,
+    description: data?.event?.description?.trim() || undefined,
+    location: data?.event?.location?.trim() || undefined,
+    eventDate: formatIngestEventSchedule(data?.event?.date, data?.event?.time),
+    googleCalendarUrl: data?.calendarPayload?.googleCalendarUrl,
+  };
+}
 
 const byPrefixAndName = {
   fas: {
@@ -186,8 +220,9 @@ export default function CameraPage() {
   const [sheetUploadImage, setSheetUploadImage] = useState<File | string | null>(null);
   const [linkValue, setLinkValue] = useState("");
   const [statusMessage, setStatusMessage] = useState("Requesting camera access...");
-  const [parsedEvent, setParsedEvent] = useState<{ title: string; googleCalendarUrl?: string } | null>(null);
+  const [parsedEvent, setParsedEvent] = useState<ParsedEventResult | null>(null);
   const [lastCaptureDataUrl, setLastCaptureDataUrl] = useState<string | null>(null);
+  const [lastIngestSourceUrl, setLastIngestSourceUrl] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
@@ -331,6 +366,7 @@ export default function CameraPage() {
     setIsBusy(true);
     setStatusMessage("Analyzing flyer...");
     setParsedEvent(null);
+    setLastIngestSourceUrl(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -345,23 +381,10 @@ export default function CameraPage() {
         throw new Error("Image ingest failed");
       }
 
-      const payload = (await response.json()) as {
-        data?: {
-          event?: { title?: string };
-          calendarPayload?: { googleCalendarUrl?: string };
-        };
-      };
-      const title = payload.data?.event?.title ?? "Event parsed";
-      const isNoFlyerFound = title.trim().toLowerCase() === "no flyer found";
-      setStatusMessage(isNoFlyerFound ? "No flyer found" : "");
-      setParsedEvent(
-        isNoFlyerFound
-          ? null
-          : {
-              title,
-              googleCalendarUrl: payload.data?.calendarPayload?.googleCalendarUrl,
-            },
-      );
+      const payload = (await response.json()) as { data?: IngestResponseData };
+      const parsed = mapIngestToParsedEvent(payload.data);
+      setStatusMessage(parsed ? "" : "No flyer found");
+      setParsedEvent(parsed);
       if (options?.clearSheetUpload) {
         setSheetUploadImage(null);
         closeSheet();
@@ -450,6 +473,7 @@ export default function CameraPage() {
     setIsBusy(true);
     setStatusMessage("Analyzing link...");
     setParsedEvent(null);
+    const submittedUrl = linkValue.trim();
     try {
       const response = await fetch("/api/ingest/link", {
         method: "POST",
@@ -458,7 +482,7 @@ export default function CameraPage() {
         },
         body: JSON.stringify({
           userId,
-          url: linkValue.trim(),
+          url: submittedUrl,
           persistDeck: canPersistDeck,
         }),
       });
@@ -467,23 +491,13 @@ export default function CameraPage() {
         throw new Error("Link ingest failed");
       }
 
-      const payload = (await response.json()) as {
-        data?: {
-          event?: { title?: string };
-          calendarPayload?: { googleCalendarUrl?: string };
-        };
-      };
-      const title = payload.data?.event?.title ?? "Event parsed";
-      const isNoFlyerFound = title.trim().toLowerCase() === "no flyer found";
-      setStatusMessage(isNoFlyerFound ? "No flyer found" : "");
-      setParsedEvent(
-        isNoFlyerFound
-          ? null
-          : {
-              title,
-              googleCalendarUrl: payload.data?.calendarPayload?.googleCalendarUrl,
-            },
-      );
+      const payload = (await response.json()) as { data?: IngestResponseData };
+      const parsed = mapIngestToParsedEvent(payload.data);
+      setStatusMessage(parsed ? "" : "No flyer found");
+      setParsedEvent(parsed);
+      if (parsed) {
+        setLastIngestSourceUrl(submittedUrl);
+      }
       setLinkValue("");
       closeSheet();
     } catch {
@@ -507,13 +521,35 @@ export default function CameraPage() {
     try {
       const uniName = profile?.university || profile?.universityAbbr || "";
       const displayName = uniName ? `${uniName} Student` : undefined;
+
+      let imageUrl = lastCaptureDataUrl ?? undefined;
+      if (!imageUrl && lastIngestSourceUrl) {
+        try {
+          const previewRes = await fetch("/api/link-preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: lastIngestSourceUrl }),
+          });
+          if (previewRes.ok) {
+            const previewPayload = (await previewRes.json()) as { data?: { imageUrl?: string } };
+            imageUrl = previewPayload.data?.imageUrl;
+          }
+        } catch {
+          // poster can still load from sourceUrl in browse
+        }
+      }
+
       const response = await fetch("/api/flyers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId,
           title: parsedEvent.title,
-          imageUrl: lastCaptureDataUrl ?? undefined,
+          description: [parsedEvent.description, parsedEvent.location].filter(Boolean).join("\n\n") || undefined,
+          eventDate: parsedEvent.eventDate,
+          imageUrl,
+          sourceUrl: lastIngestSourceUrl ?? undefined,
+          calendarUrl: parsedEvent.googleCalendarUrl,
           displayName,
         }),
       });
@@ -523,21 +559,24 @@ export default function CameraPage() {
           | { error?: { message?: string } }
           | { message?: string }
           | null;
-        const message =
-          payload && "error" in payload
-            ? (payload.error?.message ?? "Posting failed. Please try again.")
-            : (payload?.message ?? "Posting failed. Please try again.");
-        setPostFeedback({ tone: "error", message });
+        const apiMessage =
+          payload && "error" in payload && typeof payload.error?.message === "string"
+            ? payload.error.message
+            : undefined;
+        setPostFeedback({
+          tone: "error",
+          message: apiMessage ?? "Posting failed. Please try again.",
+        });
         return;
       }
 
       setPostFeedback({ tone: "success", message: "Posted successfully!" });
       setParsedEvent(null);
       setLastCaptureDataUrl(null);
+      setLastIngestSourceUrl(null);
       setTimeout(() => router.push("/browse"), 800);
-    } catch (error) {
-      const message = error instanceof Error && error.message ? error.message : "Posting failed. Please try again.";
-      setPostFeedback({ tone: "error", message });
+    } catch {
+      setPostFeedback({ tone: "error", message: "Posting failed. Please try again." });
     } finally {
       setIsPosting(false);
     }

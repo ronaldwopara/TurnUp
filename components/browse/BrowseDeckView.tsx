@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
+import { layoutIdForBrowseEvent, eventItemToDetail } from "@/lib/browse-event-detail";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 import { isEventLiked, toggleLikedEvent } from "@/lib/discoveries-store";
 import type { EventItem } from "@/lib/browse-data";
@@ -99,6 +100,8 @@ function buildSimpleCalendarUrl(event: EventItem): string {
   return `https://calendar.google.com/calendar/u/0/r/eventedit?text=${title}&dates=${dateStr}/${endDateStr}`;
 }
 
+const TAP_THRESHOLD_PX = 14;
+
 type DeckCardProps = {
   event: EventItem;
   onDots: (e: MouseEvent) => void;
@@ -106,6 +109,7 @@ type DeckCardProps = {
 };
 
 function DeckCard({ event, onDots, dragOffsetX }: DeckCardProps) {
+  const layoutId = layoutIdForBrowseEvent(eventItemToDetail(event).id);
   const [liked, setLiked] = useState(() => isEventLiked(event.id));
 
   const handleHeartClick = (e: MouseEvent) => {
@@ -121,12 +125,19 @@ function DeckCard({ event, onDots, dragOffsetX }: DeckCardProps) {
   return (
     <div className="deck-card">
       <div className="deck-card-image">
-        <div
-          className="deck-card-image-placeholder"
-          style={{
-            background: `linear-gradient(135deg, ${event.color} 0%, ${event.accent}44 100%)`,
-          }}
-        />
+        <motion.div
+          className={event.imageUrl ? "deck-card-image-thumb deck-card-image-thumb--photo" : "deck-card-image-thumb"}
+          layoutId={layoutId}
+          style={
+            event.imageUrl
+              ? undefined
+              : { background: `linear-gradient(135deg, ${event.color} 0%, ${event.accent}44 100%)` }
+          }
+        >
+          {event.imageUrl ? (
+            <img src={event.imageUrl} alt="" className="card-image-flyer" draggable={false} />
+          ) : null}
+        </motion.div>
         <button
           type="button"
           className="card-dots-btn card-glass-btn"
@@ -189,9 +200,10 @@ function DeckCard({ event, onDots, dragOffsetX }: DeckCardProps) {
 type BrowseDeckViewProps = {
   events: EventItem[];
   onDots: (e: MouseEvent) => void;
+  onEventSelect: (event: EventItem) => void;
 };
 
-export function BrowseDeckView({ events, onDots }: BrowseDeckViewProps) {
+export function BrowseDeckView({ events, onDots, onEventSelect }: BrowseDeckViewProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [gestureLock, setGestureLock] = useState<GestureLock>(null);
@@ -317,11 +329,16 @@ export function BrowseDeckView({ events, onDots }: BrowseDeckViewProps) {
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
 
+    const isTap = Math.abs(dx) < TAP_THRESHOLD_PX && Math.abs(dy) < TAP_THRESHOLD_PX;
+
     if (gestureLock === "horizontal") {
       if (dx > HORIZONTAL_SWIPE_THRESHOLD) {
         goNext({ axis: "x", direction: 1 }, true);
       } else if (dx < -HORIZONTAL_SWIPE_THRESHOLD) {
         goNext({ axis: "x", direction: -1 });
+      } else if (isTap && currentEvent) {
+        onEventSelect(currentEvent);
+        setDragOffset({ x: 0, y: 0 });
       } else {
         setDragOffset({ x: 0, y: 0 });
       }
@@ -330,13 +347,18 @@ export function BrowseDeckView({ events, onDots }: BrowseDeckViewProps) {
         goNext({ axis: "y", direction: 1 });
       } else if (dy >= VERTICAL_NAV_THRESHOLD) {
         goPrevious();
+      } else if (isTap && currentEvent) {
+        onEventSelect(currentEvent);
+        setDragOffset({ x: 0, y: 0 });
       } else {
         setDragOffset({ x: 0, y: 0 });
       }
+    } else if (isTap && currentEvent) {
+      onEventSelect(currentEvent);
     }
 
     setGestureLock(null);
-  }, [gestureLock, goNext, goPrevious]);
+  }, [currentEvent, gestureLock, goNext, goPrevious, onEventSelect]);
 
   const onPointerCancel = useCallback((e: PointerEvent<HTMLDivElement>) => {
     dragStartRef.current = null;

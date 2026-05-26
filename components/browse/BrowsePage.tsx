@@ -1,11 +1,13 @@
 "use client";
 
 import { startOfDay, startOfMonth } from "date-fns";
+import { LayoutGroup, motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 
+import { BrowseEventCard } from "@/components/browse/BrowseEventCard";
+import { EventDetailDialog } from "@/components/browse/EventDetailDialog";
 import { Calendar } from "@/components/ui/calendar";
-import { AddToCalendarButton } from "@/components/ui/AddToCalendarButton";
 import {
   UNIVERSITIES,
   ONBOARDING_HOME_UNIVERSITY_ID,
@@ -26,7 +28,8 @@ import {
   type AppliedDateFilter,
   type University,
 } from "@/lib/browse-data";
-import { getUserProfile, isEventLiked, setUserProfile, toggleLikedEvent, getAiSchools, getUserId } from "@/lib/discoveries-store";
+import { eventItemToDetail, flyerToDetail, layoutIdForBrowseEvent, type BrowseEventDetail } from "@/lib/browse-event-detail";
+import { getUserProfile, setUserProfile, getAiSchools, getUserId } from "@/lib/discoveries-store";
 import { BrowseDeckView } from "./BrowseDeckView";
 
 function DotsIcon() {
@@ -48,84 +51,6 @@ function HeartIcon({ filled }: { filled: boolean }) {
         strokeWidth="1.8"
       />
     </svg>
-  );
-}
-
-function formatEventCardPrice(usd: number): string {
-  if (usd === 0) return "Free";
-  return new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(
-    usd,
-  );
-}
-
-function EventCard({
-  event,
-  onDots,
-  layout = "grid",
-}: {
-  event: EventItem;
-  onDots: (e: MouseEvent) => void;
-  layout?: "grid" | "strip";
-}) {
-  const [liked, setLiked] = useState(() => isEventLiked(event.id));
-
-  const handleHeartClick = (e: MouseEvent) => {
-    e.stopPropagation();
-    const newState = toggleLikedEvent(event.id);
-    setLiked(newState);
-  };
-
-  const cls = [
-    event.tall ? "event-card card-tall" : "event-card card-short",
-    layout === "strip" ? "event-card--strip" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  return (
-    <div className={cls}>
-      <div className="card-image">
-        <div
-          className="card-image-placeholder"
-          style={{
-            background: `linear-gradient(135deg, ${event.color} 0%, ${event.accent}22 100%)`,
-          }}
-        />
-        <button
-          type="button"
-          className="card-dots-btn card-glass-btn"
-          aria-label="More options"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDots(e);
-          }}
-        >
-          <DotsIcon />
-        </button>
-        <button
-          type="button"
-          className="card-heart-btn card-glass-btn"
-          aria-label={liked ? "Unlike" : "Like"}
-          aria-pressed={liked}
-          onClick={handleHeartClick}
-        >
-          <HeartIcon filled={liked} />
-        </button>
-        <AddToCalendarButton
-          className="card-cal-floating card-glass-btn"
-          stopPropagation
-        />
-      </div>
-      <div className="card-body">
-        <h3 className="card-title">{event.title}</h3>
-        <div className="card-description">
-          <span className="card-price">{formatEventCardPrice(event.priceUsd)}</span>
-          <span className="card-description-dot" aria-hidden>
-            ·
-          </span>
-          <span className="card-date">{event.date}</span>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -159,6 +84,7 @@ export default function BrowsePage() {
   const [appliedAmenities, setAppliedAmenities] = useState<AmenityId[]>([]);
 
   const [viewMode, setViewMode] = useState<"grid" | "deck">("grid");
+  const [selectedDetail, setSelectedDetail] = useState<BrowseEventDetail | null>(null);
 
   type CommunityFlyer = {
     id: string;
@@ -167,6 +93,8 @@ export default function BrowsePage() {
     eventDate?: string;
     price?: string;
     imageUrl?: string;
+    sourceUrl?: string;
+    calendarUrl?: string;
     color: string;
     accent: string;
     createdAt: string;
@@ -176,6 +104,14 @@ export default function BrowsePage() {
     clicks: number;
   };
   const [communityFlyers, setCommunityFlyers] = useState<CommunityFlyer[]>([]);
+
+  const openCatalogEvent = useCallback((event: EventItem) => {
+    setSelectedDetail(eventItemToDetail(event));
+  }, []);
+
+  const closeEventDetail = useCallback(() => {
+    setSelectedDetail(null);
+  }, []);
   const trackedImpressions = useRef<Set<string>>(new Set());
 
   const pendingPriceTierLabel = PRICE_TIER_LABELS[tierFromSliderPercent(pendingPriceSlider)];
@@ -277,6 +213,11 @@ export default function BrowsePage() {
       // ignore
     }
   };
+
+  const openFlyerEvent = useCallback((flyer: CommunityFlyer) => {
+    setSelectedDetail(flyerToDetail(flyer));
+    void trackFlyerEvent(flyer.id, "click");
+  }, []);
 
   const filteredEvents = useMemo(() => {
     let list = ALL_EVENTS;
@@ -489,6 +430,7 @@ export default function BrowsePage() {
   };
 
   return (
+    <LayoutGroup>
     <div className="browse-page">
       <header
         className="browse-compact-header"
@@ -675,28 +617,45 @@ export default function BrowsePage() {
                       trackedImpressions.current.add(flyer.id);
                       void trackFlyerEvent(flyer.id, "impression");
                     }
+                    const flyerDetailId = flyerToDetail(flyer).id;
+                    const flyerThumbLayoutId = layoutIdForBrowseEvent(flyerDetailId);
                     return (
                       <div
                         key={flyer.id}
                         className="event-card event-card--strip community-card"
-                        onClick={() => void trackFlyerEvent(flyer.id, "click")}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openFlyerEvent(flyer)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            openFlyerEvent(flyer);
+                          }
+                        }}
                       >
                         <div className="card-image">
-                          {flyer.imageUrl ? (
-                            <img
-                              src={flyer.imageUrl}
-                              alt={flyer.title}
-                              className="card-image-flyer"
-                              draggable={false}
-                            />
-                          ) : (
-                            <div
-                              className="card-image-placeholder"
-                              style={{
-                                background: `linear-gradient(135deg, ${flyer.color} 0%, ${flyer.accent}22 100%)`,
-                              }}
-                            />
-                          )}
+                          <motion.div
+                            className={
+                              flyer.imageUrl ? "card-image-thumb card-image-thumb--photo" : "card-image-thumb"
+                            }
+                            layoutId={flyerThumbLayoutId}
+                            style={
+                              flyer.imageUrl
+                                ? undefined
+                                : {
+                                    background: `linear-gradient(135deg, ${flyer.color} 0%, ${flyer.accent}22 100%)`,
+                                  }
+                            }
+                          >
+                            {flyer.imageUrl ? (
+                              <img
+                                src={flyer.imageUrl}
+                                alt=""
+                                className="card-image-flyer"
+                                draggable={false}
+                              />
+                            ) : null}
+                          </motion.div>
                           <button
                             type="button"
                             className="card-heart-btn card-glass-btn"
@@ -773,12 +732,12 @@ export default function BrowsePage() {
                   <div className="masonry-grid">
                     <div className="masonry-col">
                       {leftCol.map((ev) => (
-                        <EventCard key={ev.id} event={ev} onDots={openCtx} layout="grid" />
+                        <BrowseEventCard key={ev.id} event={ev} onDots={openCtx} onSelect={openCatalogEvent} layout="grid" />
                       ))}
                     </div>
                     <div className="masonry-col masonry-col--stagger">
                       {rightCol.map((ev) => (
-                        <EventCard key={ev.id} event={ev} onDots={openCtx} layout="grid" />
+                        <BrowseEventCard key={ev.id} event={ev} onDots={openCtx} onSelect={openCatalogEvent} layout="grid" />
                       ))}
                     </div>
                   </div>
@@ -795,7 +754,7 @@ export default function BrowsePage() {
                         <h3 className="browse-category-title">{section.label}</h3>
                         <div className="browse-h-scroll">
                           {section.events.map((ev) => (
-                            <EventCard key={ev.id} event={ev} onDots={openCtx} layout="strip" />
+                            <BrowseEventCard key={ev.id} event={ev} onDots={openCtx} onSelect={openCatalogEvent} layout="strip" />
                           ))}
                         </div>
                       </section>
@@ -806,7 +765,7 @@ export default function BrowsePage() {
             )}
           </>
         ) : (
-          <BrowseDeckView events={filteredEvents} onDots={openCtx} />
+          <BrowseDeckView events={filteredEvents} onDots={openCtx} onEventSelect={openCatalogEvent} />
         )}
       </div>
 
@@ -1033,6 +992,13 @@ export default function BrowsePage() {
           </button>
         </div>
       </div>
+
+      <EventDetailDialog
+        detail={selectedDetail}
+        onClose={closeEventDetail}
+        onFlyerSave={(flyerId) => void trackFlyerEvent(flyerId, "save")}
+      />
     </div>
+    </LayoutGroup>
   );
 }

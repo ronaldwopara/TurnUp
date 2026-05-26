@@ -1,4 +1,5 @@
 import { ok, badRequest, serverError } from "@/lib/api/http";
+import { clientSafeErrorMessage, logServerError } from "@/lib/api/safeError";
 import { createFlyer, getPublishedFlyers } from "@/lib/repos/flyersRepo";
 import { z } from "zod";
 
@@ -11,6 +12,8 @@ const createFlyerSchema = z.object({
   eventDate: z.string().optional(),
   price: z.string().optional(),
   imageUrl: z.string().optional(),
+  sourceUrl: z.string().min(1).optional(),
+  calendarUrl: z.string().min(1).optional(),
   color: z.string().optional(),
   accent: z.string().optional(),
   displayName: z.string().optional(),
@@ -49,11 +52,7 @@ export async function POST(request: Request) {
       createdAt: flyer.createdAt,
     });
   } catch (error) {
-    console.error("Failed to create flyer:", error);
-    const message =
-      error && typeof error === "object" && "message" in error && typeof (error as { message?: unknown }).message === "string"
-        ? (error as { message: string }).message
-        : "Failed to create flyer.";
-    return serverError(message);
+    logServerError("POST /api/flyers", error);
+    return serverError(clientSafeErrorMessage(error, "Could not post this event. Please try again."));
   }
 }

@@ -27,6 +27,12 @@ export type EventItem = {
   accent: string;
   tall: boolean;
   browseRow?: BrowseRowId;
+  /** Poster image when available */
+  imageUrl?: string;
+  /** Instagram, Eventbrite, etc. — thumbnail resolved via link preview */
+  sourceUrl?: string;
+  description?: string;
+  location?: string;
 };
 
 /** Applied browse date filter — quick picks use month / weekend / tonight; calendar uses day */
@@ -151,11 +157,52 @@ export const PRICE_TIER_CAPS_USD = [20, 50, 100, 200] as const;
 // ─── Event catalog ────────────────────────────────────────────────────────────
 
 const TRENDING_EVENTS: EventItem[] = [
-  { id: 1, title: "Rooftop Jazz & Wine Night", tag: "Music", date: "Fri May 9 · 8pm", eventDate: new Date(2026, 4, 9), priceUsd: 25, amenities: ["food", "giveaways"], color: "#1a1230", accent: "#9b72cf", tall: true },
-  { id: 2, title: "Campus Art Showcase", tag: "Art", date: "Sat May 10 · 2pm", eventDate: new Date(2026, 4, 10), priceUsd: 0, amenities: ["perks"], color: "#0d1f14", accent: "#4ade80", tall: true },
+  {
+    id: 1,
+    title: "Rooftop Jazz & Wine Night",
+    tag: "Music",
+    date: "Fri May 9 · 8pm",
+    eventDate: new Date(2026, 4, 9),
+    priceUsd: 25,
+    amenities: ["food", "giveaways"],
+    color: "#1a1230",
+    accent: "#9b72cf",
+    tall: true,
+    sourceUrl: "https://www.eventbrite.com/e/rooftop-jazz-wine-night-tickets-123456789",
+    description: "Live jazz on the rooftop with wine pairings and skyline views.",
+    location: "Downtown — Rooftop Lounge",
+  },
+  {
+    id: 2,
+    title: "Campus Art Showcase",
+    tag: "Art",
+    date: "Sat May 10 · 2pm",
+    eventDate: new Date(2026, 4, 10),
+    priceUsd: 0,
+    amenities: ["perks"],
+    color: "#0d1f14",
+    accent: "#4ade80",
+    tall: true,
+    description: "Student and alumni artists exhibit across three gallery floors.",
+    location: "University Arts Building",
+  },
   { id: 3, title: "Friday Night Run Club", tag: "Fitness", date: "Fri May 9 · 6am", eventDate: new Date(2026, 4, 9), priceUsd: 15, amenities: ["giveaways"], color: "#1a0e0e", accent: "#f87171", tall: false },
   { id: 4, title: "Hackathon 2025", tag: "Tech", date: "May 11–12", eventDate: new Date(2026, 4, 11), priceUsd: 45, amenities: ["food", "perks"], color: "#0d1520", accent: "#60a5fa", tall: false },
-  { id: 5, title: "Open Mic Night", tag: "Performance", date: "Thu May 8 · 7pm", eventDate: new Date(2026, 4, 8), priceUsd: 12, amenities: ["giveaways", "perks"], color: "#1a1500", accent: "#fbbf24", tall: true },
+  {
+    id: 5,
+    title: "Open Mic Night",
+    tag: "Performance",
+    date: "Thu May 8 · 7pm",
+    eventDate: new Date(2026, 4, 8),
+    priceUsd: 12,
+    amenities: ["giveaways", "perks"],
+    color: "#1a1500",
+    accent: "#fbbf24",
+    tall: true,
+    sourceUrl: "https://luma.com/open-mic-night",
+    description: "Sign up at the door or DM the host. All genres welcome.",
+    location: "The Velvet Room",
+  },
   { id: 6, title: "Paint & Sip Social", tag: "Art", date: "Sun May 11 · 4pm", eventDate: new Date(2026, 4, 11), priceUsd: 35, amenities: ["food"], color: "#0f0d1a", accent: "#c084fc", tall: false },
   { id: 7, title: "Startup Mixer", tag: "Networking", date: "Wed May 14 · 6pm", eventDate: new Date(2026, 4, 14), priceUsd: 75, amenities: ["perks", "giveaways"], color: "#0d1a1a", accent: "#2dd4bf", tall: false },
   { id: 8, title: "Block Party BBQ", tag: "Social", date: "Sat May 17 · 1pm", eventDate: new Date(2026, 4, 17), priceUsd: 18, amenities: ["food", "giveaways", "perks"], color: "#1a0f05", accent: "#fb923c", tall: true },
