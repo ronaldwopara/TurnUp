@@ -1,4 +1,4 @@
-import { ok, badRequest } from "@/lib/api/http";
+import { ok, badRequest, serverError } from "@/lib/api/http";
 import { createFlyer, getPublishedFlyers } from "@/lib/repos/flyersRepo";
 import { z } from "zod";
 
@@ -50,6 +50,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Failed to create flyer:", error);
-    return badRequest("Failed to create flyer. Database tables may not exist.");
+    const message =
+      error && typeof error === "object" && "message" in error && typeof (error as { message?: unknown }).message === "string"
+        ? (error as { message: string }).message
+        : "Failed to create flyer.";
+    return serverError(message);
   }
 }

@@ -191,6 +191,7 @@ export default function CameraPage() {
   const [isBusy, setIsBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [postFeedback, setPostFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
@@ -501,7 +502,7 @@ export default function CameraPage() {
     if (!parsedEvent || isPosting) return;
 
     setIsPosting(true);
-    setStatusMessage("Posting to Browse...");
+    setPostFeedback(null);
 
     try {
       const uniName = profile?.university || profile?.universityAbbr || "";
@@ -518,15 +519,25 @@ export default function CameraPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to post flyer");
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | { message?: string }
+          | null;
+        const message =
+          payload && "error" in payload
+            ? (payload.error?.message ?? "Posting failed. Please try again.")
+            : (payload?.message ?? "Posting failed. Please try again.");
+        setPostFeedback({ tone: "error", message });
+        return;
       }
 
-      setStatusMessage("Posted successfully!");
+      setPostFeedback({ tone: "success", message: "Posted successfully!" });
       setParsedEvent(null);
       setLastCaptureDataUrl(null);
       setTimeout(() => router.push("/browse"), 800);
-    } catch {
-      setStatusMessage("Failed to post. Please try again.");
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "Posting failed. Please try again.";
+      setPostFeedback({ tone: "error", message });
     } finally {
       setIsPosting(false);
     }
@@ -584,14 +595,21 @@ export default function CameraPage() {
           </div>
           <div className="camera-result-name">{parsedEvent.title}</div>
           {isOrganiser ? (
-            <button
-              type="button"
-              className="camera-result-action camera-post-btn"
-              onClick={postToBrowse}
-              disabled={isPosting}
-            >
-              {isPosting ? "Posting..." : "Post to Browse"}
-            </button>
+            <>
+              <button
+                type="button"
+                className="camera-result-action camera-post-btn"
+                onClick={postToBrowse}
+                disabled={isPosting}
+              >
+                {isPosting ? "Posting..." : "Post to Browse"}
+              </button>
+              {postFeedback ? (
+                <div className={`camera-post-feedback camera-post-feedback--${postFeedback.tone}`} role="status">
+                  {postFeedback.message}
+                </div>
+              ) : null}
+            </>
           ) : (
             <AddToCalendarButton
               className="camera-result-action"

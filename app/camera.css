@@ -194,6 +194,19 @@
       flex-shrink: 0;
       pointer-events: none;
     }
+    .camera-post-feedback {
+      margin-top: -2px;
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: -0.15px;
+      text-align: center;
+    }
+    .camera-post-feedback--success {
+      color: rgba(255,255,255,0.8);
+    }
+    .camera-post-feedback--error {
+      color: rgba(255,120,120,0.9);
+    }
 
     /* Bottom sheet overlay */
     .sheet-overlay {

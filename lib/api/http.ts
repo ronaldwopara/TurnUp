@@ -16,3 +16,16 @@ export function badRequest(message: string, details?: unknown) {
     { status: 400 }
   );
 }
+
+export function serverError(message: string, details?: unknown, status = 500) {
+  return NextResponse.json(
+    {
+      error: {
+        code: "INTERNAL_ERROR",
+        message,
+        details,
+      },
+    },
+    { status }
+  );
+}
