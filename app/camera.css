@@ -202,10 +202,10 @@
     }
     .sheet-overlay.open { opacity: 1; pointer-events: all; }
 
-    /* Bottom sheet — reference: charcoal shell, large top corners, subtle handle */
+    /* Bottom sheet — black shell to match app background */
     .bottom-sheet {
       position: absolute; bottom: 0; left: 0; right: 0; z-index: 50;
-      background: #121212;
+      background: #000;
       border-radius: 28px 28px 0 0;
       padding: 10px 22px max(36px, env(safe-area-inset-bottom));
       transform: translateY(100%);
