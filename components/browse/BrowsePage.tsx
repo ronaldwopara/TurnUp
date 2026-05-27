@@ -2,7 +2,7 @@
 
 import { startOfDay, startOfMonth } from "date-fns";
 import { LayoutGroup, motion } from "motion/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 
 import { BrowseEventCard } from "@/components/browse/BrowseEventCard";
@@ -57,6 +57,7 @@ function HeartIcon({ filled }: { filled: boolean }) {
 
 export default function BrowsePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [hasMounted, setHasMounted] = useState(false);
   const [ctxOpen, setCtxOpen] = useState(false);
   const [ctxPos, setCtxPos] = useState({ x: 0, y: 0 });
@@ -224,6 +225,19 @@ export default function BrowsePage() {
     setSelectedDetail(flyerToDetail(flyer));
     void trackFlyerEvent(flyer.id, "click");
   }, []);
+
+  // Deep-link: /browse?flyerId=... should open that flyer in the detail modal.
+  useEffect(() => {
+    const flyerId = searchParams.get("flyerId");
+    if (!flyerId) return;
+    if (communityFlyers.length === 0) return;
+    if (selectedDetail?.flyerId === flyerId) return;
+
+    const found = communityFlyers.find((f) => f.id === flyerId);
+    if (found) {
+      openFlyerEvent(found);
+    }
+  }, [searchParams, communityFlyers, selectedDetail, openFlyerEvent]);
 
   const filteredEvents = useMemo(() => {
     let list = ALL_EVENTS;

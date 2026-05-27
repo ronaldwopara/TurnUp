@@ -498,8 +498,12 @@ export default function CameraPage() {
         throw new Error("Link ingest failed");
       }
 
-      const payload = (await response.json()) as { data?: IngestResponseData } | IngestResponseData;
-      const ingestData = ("data" in payload ? payload.data : payload) as IngestResponseData | undefined;
+      const payload = (await response.json()) as
+        | { data?: (IngestResponseData & { flyerId?: string; alreadyPosted?: boolean }) | undefined }
+        | (IngestResponseData & { flyerId?: string; alreadyPosted?: boolean });
+      const ingestData = ("data" in payload ? payload.data : payload) as
+        | (IngestResponseData & { flyerId?: string; alreadyPosted?: boolean })
+        | undefined;
       const parsed = mapIngestToParsedEvent(ingestData);
       setStatusMessage(parsed ? "" : "No flyer found");
       setParsedEvent(parsed);
@@ -508,6 +512,13 @@ export default function CameraPage() {
       }
       setLinkValue("");
       closeSheet();
+
+      const flyerId = ingestData?.flyerId;
+      const alreadyPosted = Boolean(ingestData?.alreadyPosted);
+      if (alreadyPosted && flyerId) {
+        setPostFeedback({ tone: "success", message: "This event is already posted — opening it in Browse." });
+        setTimeout(() => router.push(`/browse?flyerId=${encodeURIComponent(flyerId)}`), 450);
+      }
     } catch {
       setStatusMessage("Could not parse that link. Please try another.");
       setParsedEvent(null);
@@ -618,14 +629,21 @@ export default function CameraPage() {
       }
 
       const payload = (await response.json()) as {
-        data?: { id?: string; needsImage?: boolean };
+        data?: { id?: string; needsImage?: boolean; alreadyPosted?: boolean };
       };
       const flyerId = payload.data?.id;
       const needsImage = Boolean(payload.data?.needsImage);
+      const alreadyPosted = Boolean(payload.data?.alreadyPosted);
 
       setParsedEvent(null);
       setLastCaptureDataUrl(null);
       setLastIngestSourceUrl(null);
+
+      if (alreadyPosted && flyerId) {
+        setPostFeedback({ tone: "success", message: "Already posted — opening it in Browse." });
+        setTimeout(() => router.push(`/browse?flyerId=${encodeURIComponent(flyerId)}`), 350);
+        return;
+      }
 
       if (needsImage && flyerId) {
         setPendingFlyerId(flyerId);

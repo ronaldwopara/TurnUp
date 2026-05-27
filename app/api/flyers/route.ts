@@ -2,6 +2,8 @@ import { ok, badRequest, serverError } from "@/lib/api/http";
 import { clientSafeErrorMessage, logServerError } from "@/lib/api/safeError";
 import { resolveFlyerImageForPost } from "@/lib/flyer-poster";
 import { createFlyer, getPublishedFlyers } from "@/lib/repos/flyersRepo";
+import { canonicalizeSourceUrl } from "@/lib/url/canonicalizeSourceUrl";
+import { db } from "@/lib/db";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -39,14 +41,43 @@ export async function POST(request: Request) {
   }
 
   try {
+    const rawSourceUrl = parsed.data.sourceUrl?.trim();
+    const canonicalSourceUrl = rawSourceUrl ? canonicalizeSourceUrl(rawSourceUrl) : undefined;
+
+    if (rawSourceUrl || canonicalSourceUrl) {
+      const existing = await db.postedFlyer.findFirst({
+        where: {
+          published: true,
+          sourceUrl: { in: [rawSourceUrl, canonicalSourceUrl].filter((v): v is string => Boolean(v)) },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (existing) {
+        return ok({
+          id: existing.id,
+          title: existing.title,
+          description: existing.description,
+          eventDate: existing.eventDate,
+          price: existing.price,
+          imageUrl: existing.imageUrl,
+          color: existing.color,
+          accent: existing.accent,
+          createdAt: existing.createdAt,
+          needsImage: existing.imageUrl == null,
+          alreadyPosted: true,
+        });
+      }
+    }
+
     const imageUrl = await resolveFlyerImageForPost({
       imageUrl: parsed.data.imageUrl,
-      sourceUrl: parsed.data.sourceUrl,
+      sourceUrl: canonicalSourceUrl ?? parsed.data.sourceUrl,
     });
     const needsImage = imageUrl === null;
 
     const flyer = await createFlyer({
       ...parsed.data,
+      sourceUrl: canonicalSourceUrl ?? parsed.data.sourceUrl,
       imageUrl,
     });
 
@@ -61,6 +92,7 @@ export async function POST(request: Request) {
       accent: flyer.accent,
       createdAt: flyer.createdAt,
       needsImage,
+      alreadyPosted: false,
     });
   } catch (error) {
     logServerError("POST /api/flyers", error);

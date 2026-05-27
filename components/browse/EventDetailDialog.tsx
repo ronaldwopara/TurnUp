@@ -90,6 +90,7 @@ export function EventDetailDialog({ detail, onClose, onFlyerSave }: EventDetailD
   );
   const posterUrl = posterCandidates[imgIx];
   const showPoster = Boolean(posterUrl) && !posterFailed;
+  const showEmbed = Boolean(embedInfo?.embedUrl) && !embedFailed;
 
   useEffect(() => {
     if (!detail) {
@@ -233,12 +234,34 @@ export function EventDetailDialog({ detail, onClose, onFlyerSave }: EventDetailD
                   className="event-detail-poster"
                   layoutId={layoutId}
                   style={{
-                    background: showPoster
+                    background: showPoster && !showEmbed
                       ? "#0a0a0a"
                       : `linear-gradient(135deg, ${detail.color} 0%, ${detail.accent}55 100%)`,
                   }}
                 >
-                  {showPoster ? (
+                  {showEmbed ? (
+                    <iframe
+                      className="event-detail-embed-iframe event-detail-embed-iframe--hero"
+                      title={`${embedInfo?.provider ?? "social"} embedded post`}
+                      src={embedInfo!.embedUrl}
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      sandbox="allow-scripts allow-same-origin allow-popups"
+                      onLoad={() => {
+                        if (embedTimeoutRef.current != null) {
+                          window.clearTimeout(embedTimeoutRef.current);
+                          embedTimeoutRef.current = null;
+                        }
+                      }}
+                      onError={() => {
+                        setEmbedFailed(true);
+                        if (embedTimeoutRef.current != null) {
+                          window.clearTimeout(embedTimeoutRef.current);
+                          embedTimeoutRef.current = null;
+                        }
+                      }}
+                    />
+                  ) : showPoster ? (
                     <img
                       src={posterUrl}
                       alt=""
@@ -277,32 +300,7 @@ export function EventDetailDialog({ detail, onClose, onFlyerSave }: EventDetailD
                 {detail.location ? <p className="event-detail-location">{detail.location}</p> : null}
                 {detail.description ? <p className="event-detail-description">{detail.description}</p> : null}
 
-                {embedInfo?.embedUrl && !embedFailed ? (
-                  <div className="event-detail-embed" aria-label={`${embedInfo.provider} embedded post`}>
-                    <iframe
-                      className="event-detail-embed-iframe"
-                      title={`${embedInfo.provider} embedded post`}
-                      src={embedInfo.embedUrl}
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      sandbox="allow-scripts allow-same-origin allow-popups"
-                      onLoad={() => {
-                        // Some iframe failures still call onLoad; keep a timeout fallback for reliability.
-                        if (embedTimeoutRef.current != null) {
-                          window.clearTimeout(embedTimeoutRef.current);
-                          embedTimeoutRef.current = null;
-                        }
-                      }}
-                      onError={() => {
-                        setEmbedFailed(true);
-                        if (embedTimeoutRef.current != null) {
-                          window.clearTimeout(embedTimeoutRef.current);
-                          embedTimeoutRef.current = null;
-                        }
-                      }}
-                    />
-                  </div>
-                ) : null}
+                {/* Embed is rendered as the hero media (replaces poster) when available. */}
 
                 {detail.amenities && detail.amenities.length > 0 ? (
                   <div className="event-detail-amenities">

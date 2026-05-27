@@ -90,9 +90,24 @@ function trimOptional(value?: string | null): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function formatCompactYyyyMmDd(input: string): string | null {
+  const m = input.trim().match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const d = new Date(year, month - 1, day);
+  // Guard against Date overflow (e.g. 20260231).
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return d.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+}
+
 /** Human-readable date/time line from ingest fields */
 export function formatIngestEventSchedule(date?: string, time?: string): string | undefined {
-  const d = trimOptional(date);
+  const rawDate = trimOptional(date);
+  const d = rawDate ? formatCompactYyyyMmDd(rawDate) ?? rawDate : undefined;
   const t = trimOptional(time);
   if (d && t) return `${d} · ${t}`;
   return d ?? t;
