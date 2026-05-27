@@ -21,7 +21,7 @@ function parseTitleFromText(text: string): string | undefined {
   return firstLine?.replace(/^Source URL:.*$/i, "").trim() || undefined;
 }
 
-/** Resolve a display thumbnail for Instagram, TikTok, Eventbrite, and other linked URLs. */
+/** Resolve link preview metadata (same OG path as ingest / post poster). */
 export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
   const trimmed = url.trim();
   if (!trimmed) {

@@ -1,3 +1,6 @@
+import { fetchHtmlDocument } from "@/lib/extraction/fetch-html";
+import { rankPosterImageUrls } from "@/lib/extraction/poster-image";
+
 export type SocialExtractionInput = {
   url: string;
 };
@@ -53,6 +56,34 @@ function extractMetaContent(metaMap: Map<string, string>, key: string): string |
   return metaMap.get(key.toLowerCase());
 }
 
+const INSTAGRAM_CDN_PATTERN =
+  /https:\/\/(?:scontent\.cdninstagram\.com|instagram\.[a-z0-9-]+\.fna\.fbcdn\.net)\/v\/[^"'\s\\]+/gi;
+
+function extractInstagramPosterCandidates(html: string): string[] {
+  const urls = new Set<string>();
+
+  const og =
+    html.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i)?.[1] ??
+    html.match(/content=["']([^"']+)["'][^>]*property=["']og:image["']/i)?.[1];
+  if (og) {
+    const decoded = decodeHtml(og);
+    if (decoded.includes("scontent") || decoded.includes("fbcdn.net")) {
+      urls.add(decoded);
+    }
+  }
+
+  for (const match of html.matchAll(INSTAGRAM_CDN_PATTERN)) {
+    urls.add(decodeHtml(match[0]));
+  }
+
+  return [...urls];
+}
+
+function pickBestInstagramPosterUrl(candidates: string[]): string | undefined {
+  if (candidates.length === 0) return undefined;
+  return rankPosterImageUrls(candidates)[0];
+}
+
 function extractFirstUrlNearToken(html: string, token: string): string | undefined {
   const lower = html.toLowerCase();
   const tokenLower = token.toLowerCase();
@@ -93,17 +124,10 @@ async function getOpenGraphFallback(
   url: string
 ): Promise<{ text: string; mediaUrl?: string; providerRaw?: unknown } | null> {
   try {
-    const response = await fetch(url, {
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-      },
-    });
-    if (!response.ok) {
+    const html = await fetchHtmlDocument(url);
+    if (!html) {
       return null;
     }
-
-    const html = await response.text();
     const metaMap = buildMetaMap(html);
     const title =
       extractMetaContent(metaMap, "og:title") ??
@@ -111,11 +135,18 @@ async function getOpenGraphFallback(
       extractHtmlTitle(html);
     const description =
       extractMetaContent(metaMap, "og:description") ?? extractMetaContent(metaMap, "twitter:description");
+    const metaImages = [
+      extractMetaContent(metaMap, "og:image"),
+      extractMetaContent(metaMap, "og:image:secure_url"),
+      extractMetaContent(metaMap, "twitter:image"),
+      extractFirstUrlNearToken(html, "og:image"),
+    ].filter((u): u is string => Boolean(u?.trim()));
+
+    const instagramCandidates = extractInstagramPosterCandidates(html);
     const image =
-      extractMetaContent(metaMap, "og:image") ??
-      extractMetaContent(metaMap, "og:image:secure_url") ??
-      extractMetaContent(metaMap, "twitter:image") ??
-      extractFirstUrlNearToken(html, "og:image");
+      pickBestInstagramPosterUrl([...metaImages, ...instagramCandidates]) ??
+      metaImages[0];
+
     const text = [title, description, `Source URL: ${url}`].filter(Boolean).join("\n");
 
     if (!text && !image) {
@@ -130,6 +161,7 @@ async function getOpenGraphFallback(
         title,
         description,
         image,
+        images: rankPosterImageUrls([...metaImages, ...instagramCandidates]),
       },
     };
   } catch {
@@ -141,7 +173,21 @@ export async function getSocialMediaContent(
   input: SocialExtractionInput
 ): Promise<SocialExtractionOutput> {
   const endpoint = process.env.COBALT_API_URL ?? DEFAULT_COBALT_ENDPOINT;
-  const apiKey = process.env.COBALT_API_KEY;
+  const apiKey = process.env.COBALT_API_KEY?.trim();
+
+  if (!apiKey) {
+    const ogFallback = await getOpenGraphFallback(input.url);
+    if (ogFallback) {
+      return {
+        text: ogFallback.text,
+        mediaUrl: ogFallback.mediaUrl,
+        providerRaw: ogFallback.providerRaw,
+      };
+    }
+    return {
+      text: `Social link submitted: ${input.url}`,
+    };
+  }
 
   try {
     const response = await fetch(endpoint, {

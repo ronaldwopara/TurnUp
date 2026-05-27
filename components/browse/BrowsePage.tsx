@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 
 import { BrowseEventCard } from "@/components/browse/BrowseEventCard";
 import { EventDetailDialog } from "@/components/browse/EventDetailDialog";
+import { EventPosterImage } from "@/components/browse/EventPosterImage";
 import { Calendar } from "@/components/ui/calendar";
 import {
   UNIVERSITIES,
@@ -56,6 +57,7 @@ function HeartIcon({ filled }: { filled: boolean }) {
 
 export default function BrowsePage() {
   const router = useRouter();
+  const [hasMounted, setHasMounted] = useState(false);
   const [ctxOpen, setCtxOpen] = useState(false);
   const [ctxPos, setCtxPos] = useState({ x: 0, y: 0 });
 
@@ -115,6 +117,10 @@ export default function BrowsePage() {
   const trackedImpressions = useRef<Set<string>>(new Set());
 
   const pendingPriceTierLabel = PRICE_TIER_LABELS[tierFromSliderPercent(pendingPriceSlider)];
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const selectedUniversity = useMemo(() => {
     return availableUniversities.find((u) => u.id === selectedUniversityId) ?? availableUniversities[0];
@@ -451,7 +457,7 @@ export default function BrowsePage() {
           onClick={openUniFromCompact}
         >
           <span className="browse-compact-brand">TurnUp</span>
-          <span className="browse-compact-uni">{selectedUniversityAbbr}</span>
+          <span className="browse-compact-uni">{hasMounted ? selectedUniversityAbbr : ""}</span>
           <svg className="browse-compact-caret" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
             <path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -481,7 +487,7 @@ export default function BrowsePage() {
                 aria-haspopup="dialog"
                 onClick={openUniFromCompact}
               >
-                <span className="browse-location-name">{selectedUniversityAbbr}</span>
+                <span className="browse-location-name">{hasMounted ? selectedUniversityAbbr : ""}</span>
                 <svg className="city-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -634,28 +640,14 @@ export default function BrowsePage() {
                         }}
                       >
                         <div className="card-image">
-                          <motion.div
-                            className={
-                              flyer.imageUrl ? "card-image-thumb card-image-thumb--photo" : "card-image-thumb"
-                            }
+                          <EventPosterImage
+                            imageUrl={flyer.imageUrl}
+                            flyerId={flyer.id}
+                            color={flyer.color}
+                            accent={flyer.accent}
                             layoutId={flyerThumbLayoutId}
-                            style={
-                              flyer.imageUrl
-                                ? undefined
-                                : {
-                                    background: `linear-gradient(135deg, ${flyer.color} 0%, ${flyer.accent}22 100%)`,
-                                  }
-                            }
-                          >
-                            {flyer.imageUrl ? (
-                              <img
-                                src={flyer.imageUrl}
-                                alt=""
-                                className="card-image-flyer"
-                                draggable={false}
-                              />
-                            ) : null}
-                          </motion.div>
+                            maxHeight="min(48vh, 340px)"
+                          />
                           <button
                             type="button"
                             className="card-heart-btn card-glass-btn"

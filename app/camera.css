@@ -207,6 +207,23 @@
     .camera-post-feedback--error {
       color: rgba(255,120,120,0.9);
     }
+    .camera-needs-image-copy {
+      margin: 0;
+      color: rgba(255,255,255,0.85);
+      font-size: 13px;
+      line-height: 1.35;
+      letter-spacing: -0.1px;
+    }
+    .camera-needs-image-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .camera-needs-image-skip {
+      background: transparent;
+      border-color: rgba(255,255,255,0.2);
+      font-weight: 700;
+    }
 
     /* Bottom sheet overlay */
     .sheet-overlay {

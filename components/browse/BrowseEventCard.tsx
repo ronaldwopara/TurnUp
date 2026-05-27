@@ -1,9 +1,9 @@
 "use client";
 
-import { motion } from "motion/react";
 import { useState, type MouseEvent } from "react";
 
 import { AddToCalendarButton } from "@/components/ui/AddToCalendarButton";
+import { EventPosterImage } from "@/components/browse/EventPosterImage";
 import { layoutIdForBrowseEvent, buildCalendarUrlForEvent, eventItemToDetail } from "@/lib/browse-event-detail";
 import type { EventItem } from "@/lib/browse-data";
 import { isEventLiked, toggleLikedEvent } from "@/lib/discoveries-store";
@@ -73,19 +73,12 @@ export function BrowseEventCard({ event, onDots, onSelect, layout = "grid" }: Br
       }}
     >
       <div className="card-image">
-        <motion.div
-          className={event.imageUrl ? "card-image-thumb card-image-thumb--photo" : "card-image-thumb"}
+        <EventPosterImage
+          imageUrl={event.imageUrl}
+          color={event.color}
+          accent={event.accent}
           layoutId={layoutId}
-          style={
-            event.imageUrl
-              ? undefined
-              : { background: `linear-gradient(135deg, ${event.color} 0%, ${event.accent}22 100%)` }
-          }
-        >
-          {event.imageUrl ? (
-            <img src={event.imageUrl} alt="" className="card-image-flyer" draggable={false} />
-          ) : null}
-        </motion.div>
+        />
         <button
           type="button"
           className="card-dots-btn card-glass-btn"

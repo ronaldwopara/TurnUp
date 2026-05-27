@@ -7,7 +7,7 @@ export type CreateFlyerInput = {
   description?: string;
   eventDate?: string;
   price?: string;
-  imageUrl?: string;
+  imageUrl?: string | null;
   sourceUrl?: string;
   calendarUrl?: string;
   color?: string;

@@ -227,10 +227,14 @@ export default function CameraPage() {
   const [cameraReady, setCameraReady] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [postFeedback, setPostFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [pendingFlyerId, setPendingFlyerId] = useState<string | null>(null);
+  const [showNeedsImagePrompt, setShowNeedsImagePrompt] = useState(false);
+  const [isUploadingPoster, setIsUploadingPoster] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const posterUploadInputRef = useRef<HTMLInputElement | null>(null);
   const canPersistDeck = hasDeckCredentials();
   const userId = getUserId();
 
@@ -358,16 +362,16 @@ export default function CameraPage() {
   }, []);
 
   async function submitImage(file: File, options?: { clearSheetUpload?: boolean }) {
-    if (file.type && !SUPPORTED_IMAGE_TYPES.has(file.type.toLowerCase())) {
-      setStatusMessage("Unsupported image type. Use PNG, JPEG, WEBP, or GIF.");
-      setParsedEvent(null);
-      return;
-    }
     setIsBusy(true);
     setStatusMessage("Analyzing flyer...");
     setParsedEvent(null);
     setLastIngestSourceUrl(null);
     try {
+      if (file.type && !SUPPORTED_IMAGE_TYPES.has(file.type.toLowerCase())) {
+        setStatusMessage("Unsupported image type. Use PNG, JPEG, WEBP, or GIF.");
+        setParsedEvent(null);
+        return;
+      }
       const formData = new FormData();
       formData.append("file", file);
       formData.append("userId", userId);
@@ -381,13 +385,25 @@ export default function CameraPage() {
         throw new Error("Image ingest failed");
       }
 
-      const payload = (await response.json()) as { data?: IngestResponseData };
-      const parsed = mapIngestToParsedEvent(payload.data);
+      const payload = (await response.json()) as { data?: IngestResponseData } | IngestResponseData;
+      const ingestData = ("data" in payload ? payload.data : payload) as IngestResponseData | undefined;
+      const parsed = mapIngestToParsedEvent(ingestData);
       setStatusMessage(parsed ? "" : "No flyer found");
       setParsedEvent(parsed);
-      if (options?.clearSheetUpload) {
-        setSheetUploadImage(null);
+      if (parsed) {
+        try {
+          const dataUrl = await fileToDataUrl(file);
+          if (dataUrl.startsWith("data:image/")) {
+            setLastCaptureDataUrl(dataUrl);
+            addCapture(dataUrl);
+          }
+        } catch {
+          // poster can still be uploaded later via needsImage flow
+        }
         closeSheet();
+        if (options?.clearSheetUpload) {
+          setSheetUploadImage(null);
+        }
       }
     } catch {
       setStatusMessage("Could not parse image. Try another photo.");
@@ -453,16 +469,7 @@ export default function CameraPage() {
     if (!file) {
       return;
     }
-    try {
-      const dataUrl = await fileToDataUrl(file);
-      if (dataUrl) {
-        addCapture(dataUrl);
-      }
-    } catch {
-      // ignore capture-save failures and continue ingest
-    }
     await submitImage(file);
-    closeSheet();
   }
 
   async function onSubmitLink() {
@@ -491,8 +498,9 @@ export default function CameraPage() {
         throw new Error("Link ingest failed");
       }
 
-      const payload = (await response.json()) as { data?: IngestResponseData };
-      const parsed = mapIngestToParsedEvent(payload.data);
+      const payload = (await response.json()) as { data?: IngestResponseData } | IngestResponseData;
+      const ingestData = ("data" in payload ? payload.data : payload) as IngestResponseData | undefined;
+      const parsed = mapIngestToParsedEvent(ingestData);
       setStatusMessage(parsed ? "" : "No flyer found");
       setParsedEvent(parsed);
       if (parsed) {
@@ -508,36 +516,75 @@ export default function CameraPage() {
     }
   }
 
-  const cameraStatusText = isBusy ? "Processing..." : statusMessage;
+  const cameraStatusText = isBusy && !parsedEvent ? "Processing..." : statusMessage;
   const profile = getUserProfile();
   const isOrganiser = profile?.role === "organiser";
+
+  function resetNeedsImagePrompt() {
+    setShowNeedsImagePrompt(false);
+    setPendingFlyerId(null);
+    setLastCaptureDataUrl(null);
+    setLastIngestSourceUrl(null);
+  }
+
+  function skipNeedsImage() {
+    resetNeedsImagePrompt();
+    setPostFeedback(null);
+    router.push("/browse");
+  }
+
+  async function onPosterFileSelected(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !pendingFlyerId) {
+      return;
+    }
+
+    setIsUploadingPoster(true);
+    setPostFeedback(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await fetch(`/api/flyers/${pendingFlyerId}/image`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        setPostFeedback({
+          tone: "error",
+          message: "Could not upload image. Try another file or skip for now.",
+        });
+        return;
+      }
+
+      setPostFeedback({ tone: "success", message: "Poster uploaded!" });
+      resetNeedsImagePrompt();
+      setTimeout(() => router.push("/browse"), 800);
+    } catch {
+      setPostFeedback({ tone: "error", message: "Could not upload image. Please try again." });
+    } finally {
+      setIsUploadingPoster(false);
+    }
+  }
 
   async function postToBrowse() {
     if (!parsedEvent || isPosting) return;
 
     setIsPosting(true);
     setPostFeedback(null);
+    setShowNeedsImagePrompt(false);
+    setPendingFlyerId(null);
 
     try {
       const uniName = profile?.university || profile?.universityAbbr || "";
       const displayName = uniName ? `${uniName} Student` : undefined;
 
-      let imageUrl = lastCaptureDataUrl ?? undefined;
-      if (!imageUrl && lastIngestSourceUrl) {
-        try {
-          const previewRes = await fetch("/api/link-preview", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: lastIngestSourceUrl }),
-          });
-          if (previewRes.ok) {
-            const previewPayload = (await previewRes.json()) as { data?: { imageUrl?: string } };
-            imageUrl = previewPayload.data?.imageUrl;
-          }
-        } catch {
-          // poster can still load from sourceUrl in browse
-        }
-      }
+      const imageUrl = lastCaptureDataUrl?.trim().startsWith("data:image/")
+        ? lastCaptureDataUrl.trim()
+        : undefined;
 
       const response = await fetch("/api/flyers", {
         method: "POST",
@@ -570,10 +617,27 @@ export default function CameraPage() {
         return;
       }
 
-      setPostFeedback({ tone: "success", message: "Posted successfully!" });
+      const payload = (await response.json()) as {
+        data?: { id?: string; needsImage?: boolean };
+      };
+      const flyerId = payload.data?.id;
+      const needsImage = Boolean(payload.data?.needsImage);
+
       setParsedEvent(null);
       setLastCaptureDataUrl(null);
       setLastIngestSourceUrl(null);
+
+      if (needsImage && flyerId) {
+        setPendingFlyerId(flyerId);
+        setShowNeedsImagePrompt(true);
+        setPostFeedback({
+          tone: "success",
+          message: "Posted! Add a poster image so people can find your event.",
+        });
+        return;
+      }
+
+      setPostFeedback({ tone: "success", message: "Posted successfully!" });
       setTimeout(() => router.push("/browse"), 800);
     } catch {
       setPostFeedback({ tone: "error", message: "Posting failed. Please try again." });
@@ -603,6 +667,13 @@ export default function CameraPage() {
         style={{ display: "none" }}
         onChange={onPickFile}
       />
+      <input
+        ref={posterUploadInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(event) => void onPosterFileSelected(event)}
+      />
 
       <div className="cam-top">
         <button type="button" className="cam-back" onClick={() => router.push("/browse")}>
@@ -627,7 +698,37 @@ export default function CameraPage() {
           <LinksIcon />
         </button>
       </div>
-      {parsedEvent ? (
+      {showNeedsImagePrompt && pendingFlyerId ? (
+        <div className="camera-result-card camera-needs-image-card" role="status" aria-live="polite">
+          <div className="camera-result-title">Add a poster image</div>
+          <p className="camera-needs-image-copy">
+            Add a poster image so people can find your event.
+          </p>
+          <div className="camera-needs-image-actions">
+            <button
+              type="button"
+              className="camera-result-action camera-post-btn"
+              onClick={() => posterUploadInputRef.current?.click()}
+              disabled={isUploadingPoster}
+            >
+              {isUploadingPoster ? "Uploading..." : "Upload Image"}
+            </button>
+            <button
+              type="button"
+              className="camera-result-action camera-needs-image-skip"
+              onClick={skipNeedsImage}
+              disabled={isUploadingPoster}
+            >
+              Skip
+            </button>
+          </div>
+          {postFeedback ? (
+            <div className={`camera-post-feedback camera-post-feedback--${postFeedback.tone}`} role="status">
+              {postFeedback.message}
+            </div>
+          ) : null}
+        </div>
+      ) : parsedEvent ? (
         <div className="camera-result-card" role="status" aria-live="polite">
           <div className="camera-result-title">
             {isOrganiser ? "Ready to post this event?" : "Ready to add this event?"}
@@ -675,7 +776,7 @@ export default function CameraPage() {
             onChange={setSheetUploadImage}
             aspectRatio={1.55}
             disabled={isBusy}
-            isLoading={isBusy && sheet === "uploads"}
+            isLoading={isBusy && sheet === "uploads" && !parsedEvent}
             onCaptureSave={(dataUrl) => {
               addCapture(dataUrl);
             }}

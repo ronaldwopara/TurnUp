@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
+import { EventPosterImage } from "@/components/browse/EventPosterImage";
 import { layoutIdForBrowseEvent, eventItemToDetail } from "@/lib/browse-event-detail";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 import { isEventLiked, toggleLikedEvent } from "@/lib/discoveries-store";
@@ -124,20 +125,16 @@ function DeckCard({ event, onDots, dragOffsetX }: DeckCardProps) {
 
   return (
     <div className="deck-card">
-      <div className="deck-card-image">
-        <motion.div
-          className={event.imageUrl ? "deck-card-image-thumb deck-card-image-thumb--photo" : "deck-card-image-thumb"}
+      <div className={`deck-card-image${event.imageUrl ? " deck-card-image--photo" : ""}`}>
+        <EventPosterImage
+          imageUrl={event.imageUrl}
+          color={event.color}
+          accent={event.accent}
           layoutId={layoutId}
-          style={
-            event.imageUrl
-              ? undefined
-              : { background: `linear-gradient(135deg, ${event.color} 0%, ${event.accent}44 100%)` }
-          }
-        >
-          {event.imageUrl ? (
-            <img src={event.imageUrl} alt="" className="card-image-flyer" draggable={false} />
-          ) : null}
-        </motion.div>
+          className="deck-card-image-thumb"
+          imgClassName="card-image-flyer"
+          maxHeight="min(58vh, 480px)"
+        />
         <button
           type="button"
           className="card-dots-btn card-glass-btn"

@@ -136,6 +136,42 @@ function noFlyerResult(reason: string, contextHint?: string): ExtractionResult {
   };
 }
 
+function coerceExtractionResultShape(input: unknown): unknown {
+  if (!input || typeof input !== "object") {
+    return input;
+  }
+
+  const obj = input as Record<string, unknown>;
+  const event = typeof obj.event === "object" && obj.event ? (obj.event as Record<string, unknown>) : undefined;
+
+  // Some providers/models return `ambiguityNotes: null` even though the schema expects `string[]`.
+  if (obj.ambiguityNotes == null || !Array.isArray(obj.ambiguityNotes)) {
+    obj.ambiguityNotes = [];
+  }
+
+  // Some responses put confidence at the top-level.
+  if (typeof obj.confidence === "number" && event) {
+    const eventConfidence = event.confidence;
+    if (eventConfidence == null) {
+      event.confidence = obj.confidence;
+    }
+  }
+
+  // Ensure extractedText is always a string for schema compatibility.
+  if (typeof obj.extractedText !== "string") {
+    obj.extractedText = typeof obj.extracted_text === "string" ? obj.extracted_text : "";
+  }
+
+  // Ensure event exists and has the required `title` key for the schema.
+  if (!event) {
+    obj.event = { title: "no flyer found" };
+  } else if (typeof event.title !== "string" || !event.title.trim()) {
+    event.title = "no flyer found";
+  }
+
+  return obj;
+}
+
 function normalizeExtraction(result: ExtractionResult): ExtractionResult {
   const title = result.event.title.trim();
   const normalizedTitle = title.toLowerCase();
@@ -223,7 +259,9 @@ async function callImageExtraction(input: {
     return null;
   }
 
-  const parsed = extractionResultSchema.safeParse(llm);
+  // Coerce a few provider/model shape quirks before strict validation.
+  const coerced = coerceExtractionResultShape(llm);
+  const parsed = extractionResultSchema.safeParse(coerced);
   return parsed.success ? parsed.data : null;
 }
 

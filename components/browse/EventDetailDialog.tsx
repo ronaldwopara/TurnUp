@@ -1,10 +1,11 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 
 import { AddToCalendarButton } from "@/components/ui/AddToCalendarButton";
 import { layoutIdForBrowseEvent, type BrowseEventDetail } from "@/lib/browse-event-detail";
+import { getDisplayImageCandidates } from "@/lib/image-display";
 import { isEventLiked, toggleLikedEvent } from "@/lib/discoveries-store";
 
 function BackIcon() {
@@ -27,6 +28,43 @@ function HeartIcon({ filled }: { filled: boolean }) {
   );
 }
 
+function getSocialEmbedUrl(sourceUrl?: string | null): { embedUrl: string; provider: "instagram" | "tiktok" } | null {
+  if (!sourceUrl) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(sourceUrl);
+  } catch {
+    return null;
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const path = parsed.pathname;
+
+  // Instagram: /p/{shortcode} or /reel/{shortcode}
+  if (host.includes("instagram.com")) {
+    const m = path.match(/^\/(p|reel)\/([^/?#]+)/i);
+    if (!m) return null;
+    const kind = m[1].toLowerCase();
+    const shortcode = m[2];
+
+    if (kind === "p") {
+      return { provider: "instagram", embedUrl: `https://www.instagram.com/p/${shortcode}/embed/captioned/` };
+    }
+    return { provider: "instagram", embedUrl: `https://www.instagram.com/reel/${shortcode}/embed/` };
+  }
+
+  // TikTok: /@user/video/{id}
+  if (host.includes("tiktok.com")) {
+    const m = path.match(/^\/@[^/]+\/video\/([^/?#]+)/i);
+    if (!m) return null;
+    const videoId = m[1];
+    return { provider: "tiktok", embedUrl: `https://www.tiktok.com/embed/v2/${videoId}` };
+  }
+
+  return null;
+}
+
 type EventDetailDialogProps = {
   detail: BrowseEventDetail | null;
   onClose: () => void;
@@ -37,20 +75,39 @@ export function EventDetailDialog({ detail, onClose, onFlyerSave }: EventDetailD
   const [resolvedImageUrl, setResolvedImageUrl] = useState<string | undefined>();
   const [previewLoading, setPreviewLoading] = useState(false);
   const [liked, setLiked] = useState(false);
+  const [imgIx, setImgIx] = useState(0);
+  const [posterFailed, setPosterFailed] = useState(false);
+
+  const embedInfo = useMemo(() => getSocialEmbedUrl(detail?.sourceUrl), [detail?.sourceUrl]);
+  const [embedFailed, setEmbedFailed] = useState(false);
+  const embedTimeoutRef = useRef<number | null>(null);
+  const embedAttemptIdRef = useRef(0);
 
   const layoutId = detail ? layoutIdForBrowseEvent(detail.id) : undefined;
-  const posterUrl = resolvedImageUrl ?? detail?.imageUrl;
+  const posterCandidates = useMemo(
+    () => getDisplayImageCandidates(resolvedImageUrl ?? detail?.imageUrl, detail?.flyerId),
+    [resolvedImageUrl, detail?.imageUrl, detail?.flyerId],
+  );
+  const posterUrl = posterCandidates[imgIx];
+  const showPoster = Boolean(posterUrl) && !posterFailed;
+
   useEffect(() => {
     if (!detail) {
       setResolvedImageUrl(undefined);
       setPreviewLoading(false);
+      setImgIx(0);
+      setPosterFailed(false);
+      setEmbedFailed(false);
       return;
     }
 
     setResolvedImageUrl(detail.imageUrl);
     setLiked(detail.catalogId != null ? isEventLiked(detail.catalogId) : false);
+    setImgIx(0);
+    setPosterFailed(false);
+    setEmbedFailed(false);
 
-    if (detail.imageUrl || !detail.sourceUrl) {
+    if (detail.flyerId || detail.imageUrl || !detail.sourceUrl) {
       setPreviewLoading(false);
       return;
     }
@@ -70,7 +127,8 @@ export function EventDetailDialog({ detail, onClose, onFlyerSave }: EventDetailD
           data?: { imageUrl?: string; faviconUrl?: string };
         };
         if (cancelled) return;
-        setResolvedImageUrl(payload.data?.imageUrl ?? payload.data?.faviconUrl);
+        const nextUrl = payload.data?.imageUrl ?? payload.data?.faviconUrl;
+        setResolvedImageUrl(nextUrl);
       } catch {
         // keep gradient placeholder
       } finally {
@@ -82,6 +140,32 @@ export function EventDetailDialog({ detail, onClose, onFlyerSave }: EventDetailD
       cancelled = true;
     };
   }, [detail]);
+
+  // Hide the embed if it doesn't load (private/blocked posts, iframe blocked by the platform, etc.).
+  useEffect(() => {
+    setEmbedFailed(false);
+    if (!embedInfo?.embedUrl) return;
+
+    embedAttemptIdRef.current += 1;
+    const attemptId = embedAttemptIdRef.current;
+
+    if (embedTimeoutRef.current != null) {
+      window.clearTimeout(embedTimeoutRef.current);
+      embedTimeoutRef.current = null;
+    }
+
+    embedTimeoutRef.current = window.setTimeout(() => {
+      if (embedAttemptIdRef.current !== attemptId) return;
+      setEmbedFailed(true);
+    }, 8000);
+
+    return () => {
+      if (embedTimeoutRef.current != null) {
+        window.clearTimeout(embedTimeoutRef.current);
+        embedTimeoutRef.current = null;
+      }
+    };
+  }, [embedInfo?.embedUrl]);
 
   useEffect(() => {
     if (!detail) return;
@@ -149,13 +233,25 @@ export function EventDetailDialog({ detail, onClose, onFlyerSave }: EventDetailD
                   className="event-detail-poster"
                   layoutId={layoutId}
                   style={{
-                    background: posterUrl
-                      ? "#000"
+                    background: showPoster
+                      ? "#0a0a0a"
                       : `linear-gradient(135deg, ${detail.color} 0%, ${detail.accent}55 100%)`,
                   }}
                 >
-                  {posterUrl ? (
-                    <img src={posterUrl} alt="" className="event-detail-poster-img" draggable={false} />
+                  {showPoster ? (
+                    <img
+                      src={posterUrl}
+                      alt=""
+                      className="event-detail-poster-img"
+                      draggable={false}
+                      onError={() => {
+                        if (imgIx + 1 < posterCandidates.length) {
+                          setImgIx((i) => i + 1);
+                        } else {
+                          setPosterFailed(true);
+                        }
+                      }}
+                    />
                   ) : null}
                   {previewLoading ? <div className="event-detail-poster-loading">Loading preview…</div> : null}
                 </motion.div>
@@ -180,6 +276,34 @@ export function EventDetailDialog({ detail, onClose, onFlyerSave }: EventDetailD
                 {detail.postedBy ? <p className="event-detail-byline">Posted by {detail.postedBy}</p> : null}
                 {detail.location ? <p className="event-detail-location">{detail.location}</p> : null}
                 {detail.description ? <p className="event-detail-description">{detail.description}</p> : null}
+
+                {embedInfo?.embedUrl && !embedFailed ? (
+                  <div className="event-detail-embed" aria-label={`${embedInfo.provider} embedded post`}>
+                    <iframe
+                      className="event-detail-embed-iframe"
+                      title={`${embedInfo.provider} embedded post`}
+                      src={embedInfo.embedUrl}
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      sandbox="allow-scripts allow-same-origin allow-popups"
+                      onLoad={() => {
+                        // Some iframe failures still call onLoad; keep a timeout fallback for reliability.
+                        if (embedTimeoutRef.current != null) {
+                          window.clearTimeout(embedTimeoutRef.current);
+                          embedTimeoutRef.current = null;
+                        }
+                      }}
+                      onError={() => {
+                        setEmbedFailed(true);
+                        if (embedTimeoutRef.current != null) {
+                          window.clearTimeout(embedTimeoutRef.current);
+                          embedTimeoutRef.current = null;
+                        }
+                      }}
+                    />
+                  </div>
+                ) : null}
+
                 {detail.amenities && detail.amenities.length > 0 ? (
                   <div className="event-detail-amenities">
                     {detail.amenities.map((label) => (

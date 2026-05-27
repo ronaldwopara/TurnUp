@@ -1,5 +1,6 @@
 import { ok, badRequest, serverError } from "@/lib/api/http";
 import { clientSafeErrorMessage, logServerError } from "@/lib/api/safeError";
+import { resolveFlyerImageForPost } from "@/lib/flyer-poster";
 import { createFlyer, getPublishedFlyers } from "@/lib/repos/flyersRepo";
 import { z } from "zod";
 
@@ -38,7 +39,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    const flyer = await createFlyer(parsed.data);
+    const imageUrl = await resolveFlyerImageForPost({
+      imageUrl: parsed.data.imageUrl,
+      sourceUrl: parsed.data.sourceUrl,
+    });
+    const needsImage = imageUrl === null;
+
+    const flyer = await createFlyer({
+      ...parsed.data,
+      imageUrl,
+    });
 
     return ok({
       id: flyer.id,
@@ -50,6 +60,7 @@ export async function POST(request: Request) {
       color: flyer.color,
       accent: flyer.accent,
       createdAt: flyer.createdAt,
+      needsImage,
     });
   } catch (error) {
     logServerError("POST /api/flyers", error);
