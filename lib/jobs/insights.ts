@@ -1,4 +1,3 @@
-import { callStructuredLlm } from "@/lib/llm/client";
 import { replaceLearnedFacts } from "@/lib/repos/profileRepo";
 import { getRecentEventTexts } from "@/lib/repos/stashRepo";
 
@@ -32,49 +31,8 @@ function heuristicFacts(eventRows: string[]): LearnedFactDraft[] {
   return out.slice(0, 8);
 }
 
-async function llmFacts(eventRows: string[]): Promise<LearnedFactDraft[] | null> {
-  const llm = await callStructuredLlm<{
-    learnedFacts?: Array<{ text?: string; type?: string; confidence?: number }>;
-  }>({
-    jsonSchemaName: "LearnedFacts",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You generate compact student profile facts from event history. Return JSON with learnedFacts array only.",
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text:
-              "From this event history, output up to 8 short profile facts.\n" +
-              "Each fact must include text, type, confidence(0-1).\n\n" +
-              eventRows.join("\n"),
-          },
-        ],
-      },
-    ],
-  });
-
-  if (!llm?.learnedFacts?.length) {
-    return null;
-  }
-
-  const cleaned = llm.learnedFacts
-    .map((item) => ({
-      text: item.text?.trim() ?? "",
-      factType: item.type?.trim() || "llm_inferred",
-      confidence: Math.min(1, Math.max(0, item.confidence ?? 0.6)),
-    }))
-    .filter((item) => item.text.length > 0);
-
-  return cleaned.length ? cleaned.slice(0, 8) : null;
-}
-
 export async function regenerateInsightsForUser(userId: string) {
   const eventRows = await getRecentEventTexts(userId);
-  const generated = (await llmFacts(eventRows)) ?? heuristicFacts(eventRows);
+  const generated = heuristicFacts(eventRows);
   return replaceLearnedFacts(userId, generated);
 }

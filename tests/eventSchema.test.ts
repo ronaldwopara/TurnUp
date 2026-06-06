@@ -5,6 +5,7 @@ import {
   eventPayloadSchema,
   extractionResultSchema,
 } from "../lib/extraction/eventSchema";
+import { parseTextToExtractionResult } from "../lib/eventExtraction/extractEventFromText";
 import { zonedWallClockToUtc } from "../lib/googleCalendarUrl";
 
 describe("event payload schema", () => {
@@ -181,6 +182,34 @@ describe("event payload schema", () => {
     expect(payload.outlookCalendarUrl).toContain("enddt=2026-01-09T00%3A00%3A00");
   });
 
+  it("parses month day lists with a trailing comma year (not 'of YYYY')", () => {
+    const payload = buildCalendarPayload({
+      title: "ESS Career Fair",
+      date: "Jan 6, 7, and 8, 2026",
+      location: "ETLC Solarium",
+      description: "Networking and job opportunities",
+      confidence: 0.9,
+    });
+
+    expect(payload.googleCalendarUrl).toContain("dates=20260106%2F20260109");
+    expect(payload.outlookCalendarUrl).toContain("startdt=2026-01-06T00%3A00%3A00");
+    expect(payload.outlookCalendarUrl).toContain("enddt=2026-01-09T00%3A00%3A00");
+  });
+
+  it("parses month day lists with ampersand and uppercase month", () => {
+    const payload = buildCalendarPayload({
+      title: "ESS Career Fair",
+      date: "JAN 6, 7, & 8, 2026",
+      time: "10:00 AM - 3:00 PM",
+      location: "ETLC Solarium",
+      description: "Networking and recruiting.",
+      confidence: 0.9,
+    });
+
+    expect(payload.googleCalendarUrl).toContain("dates=20260106T100000%2F20260106T150000");
+    expect(payload.googleCalendarUrl).toContain("recur=RRULE%3AFREQ%3DDAILY%3BCOUNT%3D3");
+  });
+
   it("uses RRULE for multi-day timed events by default", () => {
     const payload = buildCalendarPayload({
       title: "ESS Career Fair",
@@ -208,6 +237,21 @@ describe("event payload schema", () => {
 
     expect(payload.googleCalendarUrl).toContain("dates=20260106T090000%2F20260108T170000");
     expect(payload.googleCalendarUrl).not.toContain("recur=");
+  });
+
+  it("uses RRULE for comma day lists even if calendarSchedule is multi_day_continuous", () => {
+    const payload = buildCalendarPayload({
+      title: "ESS Career Fair",
+      date: "JAN 6, 7, & 8, 2026",
+      time: "10AM - 3PM",
+      calendarSchedule: "multi_day_continuous",
+      location: "ETLC Solarium",
+      description: "Networking and recruiting.",
+      confidence: 0.9,
+    });
+
+    expect(payload.googleCalendarUrl).toContain("dates=20260106T100000%2F20260106T150000");
+    expect(payload.googleCalendarUrl).toContain("recur=RRULE%3AFREQ%3DDAILY%3BCOUNT%3D3");
   });
 
   it("builds eventedit URL from Date inputs", () => {
@@ -264,5 +308,14 @@ describe("event payload schema", () => {
 
     expect(payload.googleCalendarUrl).toContain(encodeURIComponent("QR link: https://example.com/qr-ticket"));
     expect(payload.outlookCalendarUrl).not.toContain(encodeURIComponent("QR link: https://example.com/qr-ticket"));
+  });
+
+  it("maps deterministic parser output into calendar links", () => {
+    const parsed = parseTextToExtractionResult(
+      "Hack Night\nJune 18th 7:00 PM\nRoom 201, Engineering Building\nBring your laptop",
+    );
+    const payload = buildCalendarPayload(parsed.extractionResult.event);
+    expect(payload.title.toLowerCase()).toContain("hack night");
+    expect(payload.googleCalendarUrl).toContain("/eventedit");
   });
 });

@@ -1,35 +1,6 @@
 import { ok, badRequest } from "@/lib/api/http";
-import { callStructuredLlm } from "@/lib/llm/client";
 
 export const runtime = "nodejs";
-
-const SCHOOLS_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["schools"],
-  properties: {
-    schools: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["name", "abbreviation"],
-        properties: {
-          name: {
-            type: "string",
-            description: "Full official name of the post-secondary institution.",
-          },
-          abbreviation: {
-            type: "string",
-            description:
-              "Short commonly used abbreviation, 2–6 uppercase characters, no spaces.",
-          },
-        },
-      },
-      description: "3–5 post-secondary institutions in or directly serving the area.",
-    },
-  },
-} as const;
 
 type NominatimResult = {
   address?: {
@@ -44,6 +15,35 @@ type NominatimResult = {
 };
 
 type SchoolEntry = { name: string; abbreviation: string };
+
+const REGION_SCHOOL_MAP: Array<{ pattern: RegExp; schools: SchoolEntry[] }> = [
+  {
+    pattern: /\balberta|edmonton|calgary\b/i,
+    schools: [
+      { name: "University of Alberta", abbreviation: "UAlberta" },
+      { name: "MacEwan University", abbreviation: "MU" },
+      { name: "NAIT", abbreviation: "NAIT" },
+      { name: "University of Calgary", abbreviation: "UCalgary" },
+    ],
+  },
+  {
+    pattern: /\bbritish columbia|vancouver|burnaby\b/i,
+    schools: [
+      { name: "University of British Columbia", abbreviation: "UBC" },
+      { name: "Simon Fraser University", abbreviation: "SFU" },
+      { name: "British Columbia Institute of Technology", abbreviation: "BCIT" },
+    ],
+  },
+  {
+    pattern: /\bontario|toronto|ottawa|waterloo\b/i,
+    schools: [
+      { name: "University of Toronto", abbreviation: "UofT" },
+      { name: "York University", abbreviation: "YU" },
+      { name: "Toronto Metropolitan University", abbreviation: "TMU" },
+      { name: "University of Waterloo", abbreviation: "UW" },
+    ],
+  },
+];
 
 async function reverseGeocode(
   lat: number,
@@ -68,6 +68,23 @@ async function reverseGeocode(
   }
 }
 
+function normalizeAbbreviation(input: string): string {
+  return input.replace(/[^A-Za-z0-9]/g, "").slice(0, 12);
+}
+
+function deterministicNearbySchools(locationLabel: string): SchoolEntry[] {
+  for (const entry of REGION_SCHOOL_MAP) {
+    if (entry.pattern.test(locationLabel)) {
+      return entry.schools;
+    }
+  }
+  return [
+    { name: "Local University", abbreviation: "UNI" },
+    { name: "Local College", abbreviation: "COL" },
+    { name: "Regional Polytechnic Institute", abbreviation: "RPI" },
+  ];
+}
+
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     lat?: number;
@@ -85,46 +102,11 @@ export async function POST(request: Request) {
     return badRequest("Could not determine location from coordinates");
   }
 
-  const locationLabel =
-    geo.region && geo.country
-      ? `${geo.city}, ${geo.region}, ${geo.country}`
-      : geo.city;
-
-  const result = await callStructuredLlm<{ schools: SchoolEntry[] }>({
-    jsonSchemaName: "NearbySchools",
-    jsonSchema: SCHOOLS_SCHEMA as unknown as Record<string, unknown>,
-    temperature: 0.2,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are generating a list of post-secondary institutions for a location-based dropdown.\n\n" +
-          "Rules:\n" +
-          "- Only include universities and colleges located in or directly serving this area.\n" +
-          "- Do NOT include schools outside this region.\n" +
-          "- Keep the list concise (3 to 5 schools).\n" +
-          "- For each school provide the full official name and a short commonly used abbreviation (2–6 uppercase characters, no spaces).\n" +
-          "- Return JSON only.",
-      },
-      {
-        role: "user",
-        content: `User location: ${locationLabel}`,
-      },
-    ],
-  });
-
-  const schools: SchoolEntry[] = (result?.schools ?? [])
-    .filter(
-      (s): s is SchoolEntry =>
-        typeof s.name === "string" &&
-        typeof s.abbreviation === "string" &&
-        s.name.length > 0 &&
-        s.abbreviation.length > 0,
-    )
-    .map((s) => ({
-      name: s.name.trim(),
-      abbreviation: s.abbreviation.trim().replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6),
-    }));
+  const locationLabel = [geo.city, geo.region, geo.country].filter(Boolean).join(", ");
+  const schools = deterministicNearbySchools(locationLabel).map((school) => ({
+    name: school.name.trim(),
+    abbreviation: normalizeAbbreviation(school.abbreviation),
+  }));
 
   return ok({
     city: geo.city,
