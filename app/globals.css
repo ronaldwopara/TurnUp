@@ -25,6 +25,27 @@ body {
   justify-content: center;
 }
 
+.clerk-setup-notice {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  padding: 10px 16px;
+  background: #7f1d1d;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.clerk-setup-notice code {
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
 .mobile-frame {
   width: 100%;
   height: 100%;

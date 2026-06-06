@@ -1,6 +1,10 @@
-import {ClerkProvider} from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { DM_Sans } from "next/font/google";
+
+import ClerkNetworkRecovery from "@/components/ClerkNetworkRecovery";
+import ClerkSetupNotice from "@/components/ClerkSetupNotice";
+import { clerkProviderProps } from "@/lib/clerk-env";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -21,7 +25,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={dmSans.className}>
-        <ClerkProvider>
+        <ClerkProvider {...clerkProviderProps}>
+          <ClerkSetupNotice />
+          <ClerkNetworkRecovery />
           <div className="app-root">{children}</div>
         </ClerkProvider>
       </body>
