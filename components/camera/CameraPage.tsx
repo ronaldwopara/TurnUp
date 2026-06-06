@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 
 import { ImageUploadField } from "./ImageUploadField";
 import { AddToCalendarButton } from "@/components/ui/AddToCalendarButton";
-import { EventConfirmationForm } from "./EventConfirmationForm";
 import { ExtractionDebugPanel } from "./ExtractionDebugPanel";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLink } from "@fortawesome/free-solid-svg-icons";
@@ -257,7 +256,6 @@ export default function CameraPage() {
   const [isBusy, setIsBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
-  const [isGeneratingCalendar, setIsGeneratingCalendar] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
@@ -588,44 +586,6 @@ export default function CameraPage() {
   const profile = getUserProfile();
   const isOrganiser = profile?.role === "organiser";
 
-  async function openCalendarFromEditedFields() {
-    if (!parsedEvent || isGeneratingCalendar) {
-      return;
-    }
-    setIsGeneratingCalendar(true);
-    try {
-      const response = await fetch("/api/calendar/payload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          event: {
-            title: parsedEvent.title.trim() || "Untitled Event",
-            date: parsedEvent.date.trim() || undefined,
-            time: parsedEvent.time.trim() || undefined,
-            location: parsedEvent.location.trim() || undefined,
-            description: parsedEvent.description.trim() || undefined,
-            calendarSchedule: parsedEvent.calendarSchedule,
-            confidence: typeof parsedEvent.confidence === "number" ? Math.max(0, Math.min(1, parsedEvent.confidence / 100)) : 0.5,
-          },
-        }),
-      });
-      if (!response.ok) {
-        throw new Error("Calendar payload failed");
-      }
-      const payload = (await response.json()) as { data?: { googleCalendarUrl?: string } };
-      const googleCalendarUrl = payload.data?.googleCalendarUrl ?? parsedEvent.googleCalendarUrl;
-      if (googleCalendarUrl) {
-        window.open(googleCalendarUrl, "_blank", "noopener,noreferrer");
-      }
-    } catch {
-      setStatusMessage("Could not open calendar link. Check event fields.");
-    } finally {
-      setIsGeneratingCalendar(false);
-    }
-  }
-
   async function postToBrowse() {
     if (!parsedEvent || isPosting) return;
 
@@ -711,30 +671,7 @@ export default function CameraPage() {
           <div className="camera-result-title">
             {isOrganiser ? "Ready to post this event?" : "Ready to add this event?"}
           </div>
-          <EventConfirmationForm
-            values={parsedEvent}
-            disabled={isPosting || isGeneratingCalendar}
-            onChange={(next) => {
-              setParsedEvent((current) =>
-                current
-                  ? {
-                      ...current,
-                      ...next,
-                    }
-                  : current,
-              );
-            }}
-          />
-          <div className="camera-confidence-row">
-            Confidence: {typeof parsedEvent.confidence === "number" ? `${Math.round(parsedEvent.confidence)}%` : "n/a"}
-          </div>
-          {parsedEvent.warnings?.length ? (
-            <div className="camera-warning-list">
-              {parsedEvent.warnings.map((warning) => (
-                <p key={warning}>{warning}</p>
-              ))}
-            </div>
-          ) : null}
+          <div className="camera-result-name">{parsedEvent.title}</div>
           {isOrganiser ? (
             <button
               type="button"
@@ -747,8 +684,12 @@ export default function CameraPage() {
           ) : (
             <AddToCalendarButton
               className="camera-result-action"
-              onClick={() => void openCalendarFromEditedFields()}
-              disabled={isGeneratingCalendar}
+              onClick={() => {
+                if (parsedEvent.googleCalendarUrl) {
+                  window.open(parsedEvent.googleCalendarUrl, "_blank", "noopener,noreferrer");
+                }
+              }}
+              disabled={!parsedEvent.googleCalendarUrl}
             />
           )}
           <ExtractionDebugPanel
