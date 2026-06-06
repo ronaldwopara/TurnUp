@@ -1,5 +1,6 @@
-import { badRequest, ok } from "@/lib/api/http";
+import { badRequest, ok, unauthorized } from "@/lib/api/http";
 import { socialLinkBodySchema } from "@/lib/api/schemas";
+import { requireUserId } from "@/lib/auth/requireUser";
 import { db } from "@/lib/db";
 import { buildCalendarPayload, type EventPayload } from "@/lib/extraction/eventSchema";
 import { ingestLinkFlow } from "@/lib/services/ingestService";
@@ -8,13 +9,17 @@ import { canonicalizeSourceUrl } from "@/lib/url/canonicalizeSourceUrl";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const userId = await requireUserId();
+  if (!userId) {
+    return unauthorized();
+  }
+
   const body = await request.json();
   const parsed = socialLinkBodySchema.safeParse(body);
   if (!parsed.success) {
     return badRequest("Invalid social link payload.", parsed.error.flatten());
   }
 
-  const userId = parsed.data.userId ?? "demo-user";
   const url = parsed.data.url;
   const canonicalUrl = canonicalizeSourceUrl(url);
 

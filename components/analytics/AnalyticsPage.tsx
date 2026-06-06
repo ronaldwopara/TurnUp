@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MetricChart } from "./MetricChart";
-import { getUserProfile, getUserId } from "@/lib/discoveries-store";
+import { getUserProfile } from "@/lib/discoveries-store";
+import { useTurnUpUser } from "@/lib/use-turnup-user";
 
 type FlyerAnalytics = {
   flyerId: string;
@@ -61,17 +62,18 @@ const METRIC_LABELS: Record<MetricType, { title: string; subtitle: string }> = {
 
 export default function AnalyticsPage() {
   const router = useRouter();
+  const { isLoaded, isSignedIn, userId } = useTurnUpUser();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<AggregateData | null>(null);
   const [selectedFlyer, setSelectedFlyer] = useState<string | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<MetricType>("impressions");
 
   const profile = getUserProfile();
-  const userId = getUserId();
   const isOrganiser = profile?.role === "organiser";
 
   useEffect(() => {
-    if (!isOrganiser) {
+    if (!isLoaded) return;
+    if (!isSignedIn || !isOrganiser) {
       router.push("/browse");
       return;
     }
@@ -79,7 +81,7 @@ export default function AnalyticsPage() {
     const loadAnalytics = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/flyers/analytics?userId=${encodeURIComponent(userId)}&hours=24`, {
+        const res = await fetch("/api/flyers/analytics?hours=24", {
           cache: "no-store",
         });
         if (!res.ok) throw new Error("Failed to load");
@@ -97,7 +99,7 @@ export default function AnalyticsPage() {
     void loadAnalytics();
     const t = setInterval(loadAnalytics, 15000);
     return () => clearInterval(t);
-  }, [isOrganiser, userId, router]);
+  }, [isLoaded, isSignedIn, isOrganiser, userId, router]);
 
   if (!isOrganiser) {
     return null;

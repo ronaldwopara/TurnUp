@@ -21,17 +21,22 @@ enum StashItemType {
 }
 
 model User {
-  id              String           @id @default(cuid())
-  displayName     String?
-  schoolLabel     String?
-  avatarUrl       String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  scans           ScanItem[]
-  stashItems      StashItem[]
-  learnedFacts    LearnedFact[]
-  profileInsights ProfileInsight[]
-  postedFlyers    PostedFlyer[]
+  id                 String           @id
+  displayName        String?
+  schoolLabel        String?
+  avatarUrl          String?
+  email              String?
+  role               String?
+  universityId       String?
+  university         String?
+  onboardingComplete Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  scans              ScanItem[]
+  stashItems         StashItem[]
+  learnedFacts       LearnedFact[]
+  profileInsights    ProfileInsight[]
+  postedFlyers       PostedFlyer[]
 }
 
 model ScanItem {

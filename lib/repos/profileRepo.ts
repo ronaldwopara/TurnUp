@@ -59,6 +59,41 @@ export async function ensureUser(userId: string, displayName?: string) {
   });
 }
 
+export type UpsertOnboardingInput = {
+  userId: string;
+  displayName?: string;
+  email?: string;
+  university?: string;
+  universityId?: string;
+  role?: "student" | "organiser";
+  onboardingComplete?: boolean;
+};
+
+export async function upsertOnboardingProfile(input: UpsertOnboardingInput) {
+  const schoolLabel = input.university?.trim() ?? "";
+  return db.user.upsert({
+    where: { id: input.userId },
+    create: {
+      id: input.userId,
+      displayName: input.displayName ?? "TurnUp Student",
+      email: input.email,
+      schoolLabel,
+      university: input.university,
+      universityId: input.universityId,
+      role: input.role,
+      onboardingComplete: input.onboardingComplete ?? false,
+    },
+    update: {
+      ...(input.displayName ? { displayName: input.displayName } : {}),
+      ...(input.email ? { email: input.email } : {}),
+      ...(input.university !== undefined ? { university: input.university, schoolLabel } : {}),
+      ...(input.universityId !== undefined ? { universityId: input.universityId } : {}),
+      ...(input.role !== undefined ? { role: input.role } : {}),
+      ...(input.onboardingComplete !== undefined ? { onboardingComplete: input.onboardingComplete } : {}),
+    },
+  });
+}
+
 export async function deleteUser(userId: string): Promise<boolean> {
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user) {
@@ -222,6 +257,11 @@ export async function getProfileBundle(userId: string) {
       displayName: user.displayName ?? "TurnUp Student",
       schoolLabel: user.schoolLabel ?? "",
       avatarUrl: user.avatarUrl,
+      email: user.email,
+      role: user.role,
+      universityId: user.universityId,
+      university: user.university,
+      onboardingComplete: user.onboardingComplete,
     },
     stashes: stashItems.map((item) => ({
       id: item.id,

@@ -9,7 +9,7 @@ import { ExtractionDebugPanel } from "./ExtractionDebugPanel";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLink } from "@fortawesome/free-solid-svg-icons";
 import { formatIngestEventSchedule } from "@/lib/browse-event-detail";
-import { addCapture, hasDeckCredentials, getUserId, getUserProfile } from "@/lib/discoveries-store";
+import { addCapture, hasDeckCredentials, getUserProfile } from "@/lib/discoveries-store";
 
 const byPrefixAndName = {
   fas: {
@@ -268,7 +268,6 @@ export default function CameraPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const posterUploadInputRef = useRef<HTMLInputElement | null>(null);
   const canPersistDeck = hasDeckCredentials();
-  const userId = getUserId();
 
   const openSheet = (type: "uploads" | "links") => setSheet(type);
   const closeSheet = () => setSheet(null);
@@ -406,7 +405,6 @@ export default function CameraPage() {
       }
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("userId", userId);
       formData.append("persistDeck", String(canPersistDeck));
 
       const response = await fetch("/api/ingest/image", {
@@ -544,7 +542,6 @@ export default function CameraPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId,
           url: submittedUrl,
           persistDeck: canPersistDeck,
         }),
@@ -680,7 +677,6 @@ export default function CameraPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId,
           title: parsedEvent.title,
           description: [parsedEvent.description, parsedEvent.location].filter(Boolean).join("\n\n") || undefined,
           eventDate: formatIngestEventSchedule(parsedEvent.date, parsedEvent.time),

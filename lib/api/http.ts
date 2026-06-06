@@ -29,3 +29,15 @@ export function serverError(message: string, details?: unknown, status = 500) {
     { status }
   );
 }
+
+export function unauthorized(message = "Unauthorized") {
+  return NextResponse.json(
+    {
+      error: {
+        code: "UNAUTHORIZED",
+        message,
+      },
+    },
+    { status: 401 }
+  );
+}

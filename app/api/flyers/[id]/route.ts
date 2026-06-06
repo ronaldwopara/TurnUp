@@ -1,21 +1,21 @@
-import { ok, badRequest } from "@/lib/api/http";
+import { ok, badRequest, unauthorized } from "@/lib/api/http";
+import { requireUserId } from "@/lib/auth/requireUser";
 import { getFlyerById } from "@/lib/repos/flyersRepo";
 import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 export async function DELETE(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id: flyerId } = await params;
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
-
+    const userId = await requireUserId();
     if (!userId) {
-      return badRequest("userId is required");
+      return unauthorized();
     }
+
+    const { id: flyerId } = await params;
 
     const flyer = await getFlyerById(flyerId);
     if (!flyer) {

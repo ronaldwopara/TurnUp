@@ -1,10 +1,16 @@
-import { badRequest, ok } from "@/lib/api/http";
+import { badRequest, ok, unauthorized } from "@/lib/api/http";
 import { stashBodySchema } from "@/lib/api/schemas";
+import { requireUserId } from "@/lib/auth/requireUser";
 import { createStashItemOnly } from "@/lib/repos/stashRepo";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const userId = await requireUserId();
+  if (!userId) {
+    return unauthorized();
+  }
+
   const body = await request.json();
   const parsed = stashBodySchema.safeParse(body);
   if (!parsed.success) {
@@ -12,7 +18,7 @@ export async function POST(request: Request) {
   }
 
   const stash = await createStashItemOnly({
-    userId: parsed.data.userId ?? "demo-user",
+    userId,
     itemType: parsed.data.itemType,
     title: parsed.data.title,
     subtitle: parsed.data.subtitle,

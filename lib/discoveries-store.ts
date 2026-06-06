@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   CAPTURES: "turnup_captures",
   PROFILE: "turnup_profile",
   AI_SCHOOLS: "turnup_ai_schools",
+  CLERK_USER_ID: "turnup_clerk_user_id",
 } as const;
 
 const MAX_CAPTURES = 50;
@@ -36,9 +37,41 @@ export type UserProfile = {
 };
 
 export function hasDeckCredentials(profileOverride?: UserProfile | null): boolean {
+  const clerkId = getClerkUserId();
+  if (!clerkId) {
+    const profile = profileOverride ?? getUserProfile();
+    const email = profile?.schoolEmail?.trim() ?? "";
+    return email.includes("@");
+  }
   const profile = profileOverride ?? getUserProfile();
-  const email = profile?.schoolEmail?.trim() ?? "";
-  return email.includes("@");
+  return Boolean(profile?.dataPrivacyAccepted && (profile.universityId || profile.university));
+}
+
+export function setClerkUserId(userId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.CLERK_USER_ID, userId);
+  } catch {
+    // ignore
+  }
+}
+
+export function getClerkUserId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(STORAGE_KEYS.CLERK_USER_ID);
+  } catch {
+    return null;
+  }
+}
+
+export function clearClerkUserId(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.CLERK_USER_ID);
+  } catch {
+    // ignore
+  }
 }
 
 export function clearDeckStorage(): void {
@@ -189,12 +222,15 @@ export function clearUserProfile(): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.removeItem(STORAGE_KEYS.PROFILE);
+    clearClerkUserId();
   } catch {
     // ignore localStorage write failures
   }
 }
 
 export function getUserId(): string {
+  const clerkId = getClerkUserId();
+  if (clerkId) return clerkId;
   const profile = getUserProfile();
   const email = profile?.schoolEmail?.trim().toLowerCase();
   if (email && email.includes("@")) return email;

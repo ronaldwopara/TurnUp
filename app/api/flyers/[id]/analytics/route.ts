@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { ok, badRequest } from "@/lib/api/http";
+import { ok, badRequest, unauthorized } from "@/lib/api/http";
+import { requireUserId } from "@/lib/auth/requireUser";
 import { getFlyerById, getFlyerAnalytics } from "@/lib/repos/flyersRepo";
 
 export const runtime = "nodejs";
@@ -8,13 +9,13 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const userId = await requireUserId();
+  if (!userId) {
+    return unauthorized();
+  }
+
   const { id: flyerId } = await params;
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
-
-  if (!userId) {
-    return badRequest("userId is required");
-  }
 
   const flyer = await getFlyerById(flyerId);
   if (!flyer) {

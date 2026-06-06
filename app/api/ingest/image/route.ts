@@ -1,5 +1,6 @@
-import { badRequest, ok } from "@/lib/api/http";
+import { badRequest, ok, unauthorized } from "@/lib/api/http";
 import { imageBase64BodySchema } from "@/lib/api/schemas";
+import { requireUserId } from "@/lib/auth/requireUser";
 import { ingestImageFlow } from "@/lib/services/ingestService";
 
 export const runtime = "nodejs";
@@ -36,7 +37,10 @@ function isSupportedImageMimeType(mimeType: string): boolean {
   return SUPPORTED_IMAGE_MIME_TYPES.has(normalizeMimeType(mimeType));
 }
 
-async function parseImageRequest(request: Request): Promise<
+async function parseImageRequest(
+  request: Request,
+  userId: string,
+): Promise<
   | {
       userId: string;
       imageBuffer: Buffer;
@@ -50,7 +54,6 @@ async function parseImageRequest(request: Request): Promise<
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
     const file = formData.get("file");
-    const userId = String(formData.get("userId") ?? "demo-user");
     const persistDeckRaw = String(formData.get("persistDeck") ?? "true").toLowerCase();
     const persistDeck = persistDeckRaw !== "false" && persistDeckRaw !== "0";
 
@@ -93,7 +96,7 @@ async function parseImageRequest(request: Request): Promise<
   }
 
   return {
-    userId: parsed.data.userId ?? "demo-user",
+    userId: parsed.data.userId ?? userId,
     imageBuffer,
     mimeType,
     persistDeck: parsed.data.persistDeck,
@@ -101,7 +104,12 @@ async function parseImageRequest(request: Request): Promise<
 }
 
 export async function POST(request: Request) {
-  const parsed = await parseImageRequest(request);
+  const userId = await requireUserId();
+  if (!userId) {
+    return unauthorized();
+  }
+
+  const parsed = await parseImageRequest(request, userId);
   if ("error" in parsed) {
     return badRequest(parsed.error);
   }

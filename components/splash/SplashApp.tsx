@@ -1,7 +1,6 @@
 "use client";
 
-import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
-import Link from "next/link";
+import { useUser } from "@clerk/nextjs";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type TouchEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -12,9 +11,11 @@ import {
   useTweaks,
 } from "@/components/tweaks-panel";
 
+import AuthScreen from "@/components/splash/AuthScreen";
 import { getUserProfile, setUserProfile, setAiSchools, type AiSchool } from "@/lib/discoveries-store";
 import { getPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
 import { UNIVERSITIES } from "@/lib/browse-data";
+import { buildLocalProfileFromClerk, syncLocalProfileFromClerk, useTurnUpUser } from "@/lib/use-turnup-user";
 import InterestsSelectionScreen from "@/components/profile/InterestsSelectionScreen";
 
 const EVENT_WORDS = [
@@ -36,36 +37,13 @@ const EVENT_WORDS = [
   "date night"
 ];
 
-function AuthOverlay() {
-  return (
-    <div className="auth-overlay">
-      <Show when="signed-out">
-        <div className="auth-pill-row">
-          <SignInButton mode="modal">
-            <button type="button" className="auth-pill">
-              Sign in
-            </button>
-          </SignInButton>
-          <SignUpButton mode="modal">
-            <button type="button" className="auth-pill auth-pill--primary">
-              Sign up
-            </button>
-          </SignUpButton>
-        </div>
-      </Show>
-      <Show when="signed-in">
-        <div className="auth-signed-in-row">
-          <Link href="/browse" className="auth-pill auth-pill--primary auth-browse-link">
-            Open app
-          </Link>
-          <div className="auth-user-chip">
-            <UserButton />
-          </div>
-        </div>
-      </Show>
-    </div>
-  );
-}
+type OnboardingStage = "intro" | "auth" | "gallery" | "interests" | "main";
+
+const PERMISSION_STEPS = [
+  { btn: "Use current location", skip: "Not now" },
+  { btn: "Allow notifications", skip: "Not now" },
+  { btn: "Allow camera", skip: "Not now" },
+] as const;
 
 function CyclingWord({
   words,
@@ -377,12 +355,6 @@ function PhoneScreen({ fromProfile = false }: { fromProfile?: boolean }) {
   });
 
   const { lightOffset, accentColor, headlineSize } = tweaks;
-
-  const PERMISSION_STEPS = [
-    { btn: "Use current location", skip: "Not now" },
-    { btn: "Allow notifications", skip: "Not now" },
-    { btn: "Allow camera", skip: "Not now" },
-  ];
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [permStep, setPermStepState] = useState(0);
@@ -718,11 +690,12 @@ const ORBIT_SPEED = 0.018;
 type GalleryRole = "student" | "organiser";
 
 function GalleryScreen({ onDone }: { onDone: () => void }) {
+  const { user } = useUser();
   const [ready, setReady] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [university, setUniversity] = useState("");
-  const [name, setName] = useState("");
-  const [schoolEmail, setSchoolEmail] = useState("");
   const [role, setRole] = useState<GalleryRole>("student");
   const [dataPrivacyAccepted, setDataPrivacyAccepted] = useState(false);
   const [orbitAngle, setOrbitAngle] = useState(0);
@@ -764,24 +737,60 @@ function GalleryScreen({ onDone }: { onDone: () => void }) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const handleContinue = () => {
-    if (!dataPrivacyAccepted) return;
+  const handleContinue = async () => {
+    if (!dataPrivacyAccepted || saving) return;
+    setSaving(true);
+    setError(null);
     const prev = getUserProfile();
     const normalizedUniversity = university.trim().toLowerCase();
     const selectedSchool = availableUniversities.find(
       (school) => school.name.trim().toLowerCase() === normalizedUniversity,
     );
-    setUserProfile({
-      ...(prev ?? {}),
-      name: name.trim() || prev?.name || "",
-      university: university.trim() || prev?.university || "",
-      universityId: selectedSchool?.id ?? prev?.universityId,
-      schoolEmail: schoolEmail.trim() || prev?.schoolEmail,
-      role,
-      dataPrivacyAccepted: true,
+    const clerkProfile = buildLocalProfileFromClerk({
+      user,
+      metadata: {
+        university: university.trim(),
+        universityId: selectedSchool?.id,
+        universityAbbr: selectedSchool?.abbr,
+        role,
+        dataPrivacyAccepted: true,
+      },
     });
-    setExiting(true);
-    setTimeout(onDone, 650);
+
+    try {
+      const response = await fetch("/api/profile/onboarding", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          university: university.trim(),
+          universityId: selectedSchool?.id,
+          universityAbbr: selectedSchool?.abbr,
+          role,
+          dataPrivacyAccepted: true,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Could not save profile");
+      }
+
+      setUserProfile({
+        ...(prev ?? {}),
+        ...clerkProfile,
+        university: university.trim() || prev?.university || "",
+        universityId: selectedSchool?.id ?? prev?.universityId,
+        universityAbbr: selectedSchool?.abbr ?? prev?.universityAbbr,
+        role,
+        dataPrivacyAccepted: true,
+        locationCity: prev?.locationCity,
+        availableUniversityIds: prev?.availableUniversityIds,
+      });
+      setExiting(true);
+      setTimeout(onDone, 650);
+    } catch {
+      setError("Could not save your profile. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const total = GALLERY_IMAGES.length;
@@ -831,22 +840,6 @@ function GalleryScreen({ onDone }: { onDone: () => void }) {
             aria-label="Enter your university"
           />
           {cityHint ? <p className="gallery-sub" style={{ marginTop: 2 }}>Campuses near {cityHint}</p> : null}
-          <input
-            className="gallery-input"
-            type="text"
-            placeholder="Enter your Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoComplete="given-name"
-          />
-          <input
-            className="gallery-input"
-            type="email"
-            placeholder="School email"
-            value={schoolEmail}
-            onChange={(e) => setSchoolEmail(e.target.value)}
-            autoComplete="email"
-          />
 
           <div className="gallery-role-row">
             <button
@@ -878,11 +871,12 @@ function GalleryScreen({ onDone }: { onDone: () => void }) {
           <button
             type="button"
             className={`gallery-cta${ready ? " gallery-cta--visible" : ""}`}
-            onClick={handleContinue}
-            disabled={!dataPrivacyAccepted}
+            onClick={() => void handleContinue()}
+            disabled={!dataPrivacyAccepted || saving}
           >
-            Get Started
+            {saving ? "Saving..." : "Get Started"}
           </button>
+          {error ? <p className="gallery-sub" style={{ color: "#f87171", marginTop: 8 }}>{error}</p> : null}
         </div>
       </div>
     </div>
@@ -928,11 +922,15 @@ function IntroScreen({ onDone }: { onDone: () => void }) {
 }
 
 export default function SplashApp() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const resumeHandled = useRef(false);
-  const [stage, setStage] = useState<"intro" | "gallery" | "interests" | "main">("intro");
+  const resumeEvaluated = useRef(false);
+  const { isLoaded, isSignedIn, user, metadata, onboardingComplete } = useTurnUpUser();
+  const [stage, setStage] = useState<OnboardingStage>("intro");
   const [mainVisible, setMainVisible] = useState(false);
   const [fromProfile, setFromProfile] = useState(false);
+  const [skipIntro, setSkipIntro] = useState(false);
 
   const resumePermissionsIntent = searchParams.get("resume") === "permissions";
 
@@ -948,25 +946,91 @@ export default function SplashApp() {
     setTimeout(() => setMainVisible(true), 80);
   }, [resumePermissionsIntent]);
 
-  const handleIntroDone = useCallback(() => setStage("gallery"), []);
+  useEffect(() => {
+    if (!isLoaded || resumePermissionsIntent || resumeEvaluated.current) return;
+    resumeEvaluated.current = true;
+
+    if (!isSignedIn) {
+      return;
+    }
+
+    syncLocalProfileFromClerk({ user, metadata });
+
+    if (!onboardingComplete) {
+      setSkipIntro(true);
+      setStage("gallery");
+      return;
+    }
+
+    setSkipIntro(true);
+    if (getPermissionStep() >= PERMISSION_STEPS.length - 1) {
+      router.push("/browse");
+      return;
+    }
+    setStage("main");
+    setTimeout(() => setMainVisible(true), 80);
+  }, [isLoaded, isSignedIn, metadata, onboardingComplete, resumePermissionsIntent, router, user]);
+
+  const handleIntroDone = useCallback(() => {
+    setStage("auth");
+  }, []);
+
+  const handleAuthenticated = useCallback(() => {
+    syncLocalProfileFromClerk({ user, metadata });
+    if (onboardingComplete) {
+      if (getPermissionStep() >= PERMISSION_STEPS.length - 1) {
+        router.push("/browse");
+        return;
+      }
+      setStage("main");
+      setTimeout(() => setMainVisible(true), 80);
+      return;
+    }
+    setStage("gallery");
+  }, [metadata, onboardingComplete, router, user]);
+
   const handleGalleryDone = useCallback(() => {
     setStage("interests");
   }, []);
-  const handleInterestsDone = useCallback(() => {
+
+  const handleInterestsDone = useCallback(async () => {
+    const profile = getUserProfile();
+    try {
+      await fetch("/api/profile/onboarding", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          interestTagIds: profile?.interestTagIds ?? [],
+          onboardingComplete: true,
+        }),
+      });
+      setUserProfile({
+        ...(profile ?? { name: "", university: "" }),
+        interestTagIds: profile?.interestTagIds ?? [],
+      });
+    } catch {
+      // continue even if sync fails; local profile still has interests
+    }
     setStage("main");
     setTimeout(() => setMainVisible(true), 80);
   }, []);
 
   return (
     <div className="mobile-frame">
-      <AuthOverlay />
-      {stage === "intro" && <IntroScreen onDone={handleIntroDone} />}
+      {stage === "intro" && !skipIntro && <IntroScreen onDone={handleIntroDone} />}
+      {stage === "auth" && (
+        <AuthScreen
+          isLoaded={isLoaded}
+          isSignedIn={isSignedIn}
+          onAuthenticated={handleAuthenticated}
+        />
+      )}
       {stage === "gallery" && <GalleryScreen onDone={handleGalleryDone} />}
       {stage === "interests" && (
         <InterestsSelectionScreen
           variant="onboarding"
           onBack={() => setStage("gallery")}
-          onContinue={handleInterestsDone}
+          onContinue={() => void handleInterestsDone()}
         />
       )}
       <div className={`main-wrap${mainVisible ? " visible" : ""}`}>

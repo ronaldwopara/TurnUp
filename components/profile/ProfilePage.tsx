@@ -25,12 +25,12 @@ import {
   hasDeckCredentials,
   clearUserProfile,
   clearAiSchools,
-  getUserId,
   getAiSchools,
   deleteCapture,
   toggleLikedEvent,
 } from "@/lib/discoveries-store";
 import { clearPermissionStep, setPermissionStep } from "@/lib/onboarding-perms";
+import { useTurnUpUser } from "@/lib/use-turnup-user";
 
 import { DiscoveriesStack, type DiscoveryStackItem } from "./DiscoveriesStack";
 
@@ -92,6 +92,7 @@ function deriveAiInsights(likedEvents: EventItem[], captureCount: number): strin
 }
 export default function ProfilePage() {
   const router = useRouter();
+  const { isSignedIn } = useTurnUpUser();
   const [profile, setProfile] = useState<ReturnType<typeof getUserProfile>>(null);
   const [sessionNow] = useState(() => Date.now());
   const [discoveryCount, setDiscoveryCount] = useState(0);
@@ -272,7 +273,7 @@ export default function ProfilePage() {
 
     const loadStashes = async () => {
       try {
-        const response = await fetch(`/api/profile?userId=${encodeURIComponent(getUserId())}`, { cache: "no-store" });
+        const response = await fetch("/api/profile", { cache: "no-store" });
         if (!response.ok) return;
         const payload = (await response.json()) as {
           data?: {
@@ -406,10 +407,9 @@ export default function ProfilePage() {
     const confirmed = window.confirm("Delete your TurnUp profile data from this device and server?");
     if (!confirmed) return;
 
-    const currentUserId = getUserId();
-    if (currentUserId && currentUserId !== "demo-user") {
+    if (isSignedIn) {
       try {
-        await fetch(`/api/profile?userId=${encodeURIComponent(currentUserId)}`, {
+        await fetch("/api/profile", {
           method: "DELETE",
         });
       } catch {
@@ -526,8 +526,7 @@ export default function ProfilePage() {
                 setLikesVersion((v) => v + 1);
               } else if (item.kind === "stash") {
                 try {
-                  const userId = getUserId();
-                  await fetch(`/api/flyers/${item.stashId}?userId=${encodeURIComponent(userId)}`, {
+                  await fetch(`/api/flyers/${item.stashId}`, {
                     method: "DELETE",
                   });
                   setStashes((prev) => prev.filter((s) => s.id !== item.stashId));

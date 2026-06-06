@@ -1,5 +1,6 @@
-import { ok, badRequest, serverError } from "@/lib/api/http";
+import { ok, badRequest, serverError, unauthorized } from "@/lib/api/http";
 import { clientSafeErrorMessage, logServerError } from "@/lib/api/safeError";
+import { requireUserId } from "@/lib/auth/requireUser";
 import { resolveFlyerImageForPost } from "@/lib/flyer-poster";
 import { createFlyer, getPublishedFlyers } from "@/lib/repos/flyersRepo";
 import { canonicalizeSourceUrl } from "@/lib/url/canonicalizeSourceUrl";
@@ -9,7 +10,6 @@ import { z } from "zod";
 export const runtime = "nodejs";
 
 const createFlyerSchema = z.object({
-  userId: z.string().min(1),
   title: z.string().min(1),
   description: z.string().optional(),
   eventDate: z.string().optional(),
@@ -33,6 +33,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const userId = await requireUserId();
+  if (!userId) {
+    return unauthorized();
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = createFlyerSchema.safeParse(body);
 
@@ -77,6 +82,7 @@ export async function POST(request: Request) {
 
     const flyer = await createFlyer({
       ...parsed.data,
+      userId,
       sourceUrl: canonicalSourceUrl ?? parsed.data.sourceUrl,
       imageUrl,
     });
