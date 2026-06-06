@@ -11,7 +11,8 @@
     "test": "vitest run",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "dev:mobile": "npm --prefix mobile run start"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.4.1",

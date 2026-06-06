@@ -41,3 +41,9 @@ yarn-error.log*
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# expo / react native
+/mobile/node_modules/
+/mobile/.expo/
+/mobile/dist/
+/mobile/.env
