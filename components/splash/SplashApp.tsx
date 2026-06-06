@@ -1,5 +1,7 @@
 "use client";
 
+import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type TouchEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -33,6 +35,37 @@ const EVENT_WORDS = [
   "open house",
   "date night"
 ];
+
+function AuthOverlay() {
+  return (
+    <div className="auth-overlay">
+      <Show when="signed-out">
+        <div className="auth-pill-row">
+          <SignInButton mode="modal">
+            <button type="button" className="auth-pill">
+              Sign in
+            </button>
+          </SignInButton>
+          <SignUpButton mode="modal">
+            <button type="button" className="auth-pill auth-pill--primary">
+              Sign up
+            </button>
+          </SignUpButton>
+        </div>
+      </Show>
+      <Show when="signed-in">
+        <div className="auth-signed-in-row">
+          <Link href="/browse" className="auth-pill auth-pill--primary auth-browse-link">
+            Open app
+          </Link>
+          <div className="auth-user-chip">
+            <UserButton />
+          </div>
+        </div>
+      </Show>
+    </div>
+  );
+}
 
 function CyclingWord({
   words,
@@ -926,6 +959,7 @@ export default function SplashApp() {
 
   return (
     <div className="mobile-frame">
+      <AuthOverlay />
       {stage === "intro" && <IntroScreen onDone={handleIntroDone} />}
       {stage === "gallery" && <GalleryScreen onDone={handleGalleryDone} />}
       {stage === "interests" && (
